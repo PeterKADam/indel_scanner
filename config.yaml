@@ -1,0 +1,9 @@
+# indel_scanner/config.yaml
+
+# --- Analysis Parameters ---
+min_indel_size: 1      # Minimum size of an indel to report
+min_mapping_quality: 20 # Minimum mapping quality of a read to be considered
+
+# --- Performance Parameters ---
+# Number of parallel processes to use. 'null' means use all available CPU cores.
+num_processes: null
