@@ -1,0 +1,42 @@
+graph TD;
+    subgraph "User Input"
+        A[BAM File]
+        B[FASTA File]
+        C[config.yaml]
+    end
+
+    subgraph "Core Logic: indel_scanner/"
+        D[main.py] -- Manages --> E[scanner_class.py]
+        E -- Defines --> F[ContigScanner Class]
+        E -- Defines --> G[run_scan Worker]
+    end
+
+    subgraph "Key Libraries"
+        H[pysam]
+        I[pyfastx]
+        J[PyYAML]
+        K[multiprocessing.Pool]
+        L[rich.progress]
+    end
+    
+    subgraph "File System I/O"
+        M[Partial .tsv Files]
+        N[Final Output .tsv]
+    end
+
+    C -- Loaded by --> D;
+    D -- Uses --> L;
+    D -- Creates & Manages --> K;
+    K -- Executes --> G;
+    G -- Uses instance of --> F;
+    F -- Uses --> H;
+    F -- Uses --> I;
+
+    A & B -- Read by --> F;
+    
+    F -- Writes --> M;
+    M -- Merged by --> D;
+    D -- Creates --> N;
+
+    style F fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#ccf,stroke:#333,stroke-width:2px

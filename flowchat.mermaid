@@ -1,0 +1,26 @@
+flowchart TD
+    subgraph "1. Setup Phase"
+        A[Start] --> B(Parse CLI Arguments);
+        B --> C(Load config.yaml);
+        C --> D(Create temporary output directory);
+        D --> E(Read Contig List from BAM file);
+    end
+
+    subgraph "2. Parallel Processing Phase"
+        E --> F(Initialize ContigScanner);
+        F --> G(Create Multiprocessing Pool);
+        G --> H(Submit all contig tasks to the pool);
+        H --> I(Initialize Rich Progress Bar);
+        I --> J{Iterate over results from pool};
+        J -- For each completed task --> K(Receive partial file path & status);
+        K --> L(Append file path to list);
+        L --> M(Print status message);
+        M --> N(Update progress bar);
+        N --> J;
+    end
+    
+    subgraph "3. Aggregation Phase"
+        J -- When all tasks are complete --> O(Merge all partial files into final output file);
+        O --> P(Clean up temporary directory);
+        P --> Q[End];
+    end
