@@ -1,12 +1,15 @@
 # indel_scanner/scanner_class.py
+import csv
+import os
 from pathlib import Path
 from typing import Generator, List
 import pysam
 import pyfastx
 import time
 import logging
-from indel import INDEL_TYPE, Insertion, Deletion
-from utils import Cigar, ScannerConfig
+from .indel import INDEL_TYPE, Insertion, Deletion
+from .utils import Cigar, cleanup_temp_dir
+from .configurator import ScannerConfig
 
 
 logger = logging.getLogger(__name__)
@@ -22,13 +25,10 @@ class ContigScanner:
 		available to all calls within this worker process.
 		"""
 		self.config = config
-		self.output_dir = self.config.output_dir
-		self.min_indel_size = self.config.min_length
-		self.temp_dir = self.config.temp_dir
 
 	def scan_contig(self, contig_name:str):
 	   
-		temp_output_path = self.temp_dir / f"{contig_name}.part.tsv"
+		temp_output_path = self.config.temp_dir / f"{contig_name}.part.tsv"
 		
 		try:
 			with pysam.AlignmentFile(str(self.config.bamfile), "rb") as samfile:
@@ -55,7 +55,7 @@ class ContigScanner:
 
 		for op, length in read.cigartuples:
 			if op == Cigar.OP_I:
-				if length >= self.min_indel_size:
+				if length >= self.config.min_indel_size:
 					prefix_context = read.query_sequence[max(0, query_pos - 5): query_pos]
 					indel_seq = read.query_sequence[query_pos: query_pos + length]
 					suffix_context = read.query_sequence[query_pos + length: query_pos + length + 5]
@@ -75,7 +75,7 @@ class ContigScanner:
 				query_pos += length
 
 			elif op == Cigar.OP_D:
-				if length >= self.min_indel_size:
+				if length >= self.config.min_indel_size:
 
 					if isinstance(contig_seq, str):
 						# preloaded contig sequence
@@ -115,7 +115,7 @@ class ContigScanner:
 		
 		# This fixes the UnboundLocalError bug. 
 		# `contig_seq` is now always defined.
-		if self.config.preload
+		if self.config.preload:
 			# If preloading, it's a string.
 			contig_seq = fasta[contig_name].seq
 		else:
@@ -140,7 +140,7 @@ class ContigScanner:
 					# Optimized writing without the csv module
 					f_out.writelines( f'{row} \n' for row in results_buffer)
 					results_buffer.clear()
-
+			
 			# Write any remaining results in the buffer
 			if results_buffer:
 				f_out.writelines('\t'.join(map(str, row)) + '\n' for row in results_buffer)
@@ -149,9 +149,28 @@ class ContigScanner:
 		return (temp_output_path, f"Finished {contig_name} in {end_time - start_time:.2f} s")
 
 
-def run_scan(scanner, contig_name):
+def run_scan(scanner:ContigScanner, contig_name):
 	
-	return scanner.scan_contig(scanner.config.bamfile,
-										scanner.config.fastafile,
-										contig_name)
+	return scanner.scan_contig(contig_name)
 
+def aggregate_partial_results(temp_dir, final_output_path):
+	logger.info("\nAll contigs processed. Merging results...")
+	logger.debug(f"Aggregating partial results from {temp_dir} into {final_output_path}")
+	
+	with open(final_output_path, 'w', newline='') as f_out:
+		writer = csv.writer(f_out, delimiter='\t')
+		
+		# header
+		writer.writerow(['Contig', 'Position', 'Type', 'Length',  'Sequence', 'Read_Name'])
+		
+		logger.debug(f"Writing ({len(os.listdir(temp_dir))}) partial results  to final output file...")
+		for part_file in os.listdir(temp_dir):
+			if part_file.endswith('.part.tsv'):
+				part_path = os.path.join(temp_dir, part_file)
+				with open(part_path, 'r') as f_in:
+					reader = csv.reader(f_in, delimiter='\t')
+					for row in reader:
+						writer.writerow(row)
+
+	logger.debug(f"Aggregation complete. Final output written to {final_output_path}")
+	cleanup_temp_dir(temp_dir)

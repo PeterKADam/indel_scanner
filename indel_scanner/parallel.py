@@ -1,22 +1,19 @@
 from functools import partial
-import os
 import pysam
 from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn
 from multiprocessing import Pool, cpu_count
 import logging
 
-from .utils import Config, ScannerConfig, cleanup_temp_dir, aggregate_partial_results
-from indel_scanner.scanner import run_scan
+from indel_scanner.scanner import run_scan, aggregate_partial_results
 from .scanner import ContigScanner
 
 logger = logging.getLogger(__name__)
 
-def parallel_scan(args):
-
-	scannerconfig: ScannerConfig = Config.ScannerConfig(args)
+def parallel_scan(scannerconfig):
+	
 	scanner = ContigScanner(scannerconfig)
 
-	logger.info(f"Using {scannerconfig.max_threads or cpu_count()} parallel processes.")
+	logger.info(f"Using {scannerconfig.num_processes or cpu_count()} parallel processes.")
 	
 	logger.info("Starting indel scanning process...")
 
@@ -43,7 +40,7 @@ def parallel_scan(args):
 		# Add a task to the progress display
 		task_id = progress.add_task("[green]Scanning contigs...", total=len(contigs))
 		
-		with Pool(processes=scannerconfig.max_threads or cpu_count()) as pool:
+		with Pool(processes=scannerconfig.num_processes or cpu_count()) as pool:
 			# Use imap_unordered to get results as soon as they are ready
 			results_iterator = pool.imap_unordered(partialfunc, contigs)
 			
@@ -60,4 +57,4 @@ def parallel_scan(args):
 				# Advance the progress bar by one step for each completed contig
 				progress.update(task_id, advance=1)
 
-	aggregate_partial_results(scanner.temp_dir, args.output)
+	aggregate_partial_results(scannerconfig.temp_dir, scannerconfig.output_path)

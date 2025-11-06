@@ -1,30 +1,30 @@
-import os
+
 import sys
 import logging
 import csv
 import pyfastx
 import pysam
-from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
-from indel import INDEL_TYPE, Insertion, Deletion
-from utils import Cigar
-from pathlib import Path
+
+from typing import List, Optional, Tuple
+from .indel import INDEL_TYPE
+
+from indel_scanner.configurator import ProcessorConfig
+
 
 logger = logging.getLogger(__name__)
 
 class Processor:
-	def __init__(self, input_file: Path, bam_file: Path, fasta_file: Path, config: Dict):
-		self.input_file = input_file
+	def __init__(self, config:ProcessorConfig):
 		self.config = config
-		self.reference = pyfastx.Fasta(fasta_file)
-		self.bam_file = bam_file
+		self.reference = pyfastx.Fasta(self.config.fastafile)
+	
 
 		 # Open BAM file (must be indexed)
 		try:
-			self.bam_handle = pysam.AlignmentFile(bam_file, "rb")
-			logger.info(f"Successfully opened BAM file: {bam_file}")
+			self.bam_handle = pysam.AlignmentFile(str(config.bamfile), "rb")
+			logger.info(f"Successfully opened BAM file: {config.bamfile}")
 		except Exception as e:
-			logger.error(f"Error opening BAM file {bam_file}: {e}")
+			logger.error(f"Error opening BAM file {config.bamfile}: {e}")
 			self.bam_handle = None
 
 		self.processed_records: List[List[str]] = []
@@ -35,14 +35,20 @@ class Processor:
 		"""Ensure the BAM file handle is closed when the object is destroyed."""
 		if hasattr(self, 'bam_handle') and self.bam_handle:
 			self.bam_handle.close()
-			logger.debug(f"Closed BAM file handle for {self.bam_file}")
+			logger.debug(f"Closed BAM file handle for {self.config.bamfile}")
 	
 			
 	def _parse_sequence_context(self, context_string: str) -> Tuple[str, str, str]:
 		"""
 		Parses the unified sequence context string: prefix[indel_sequence]suffix
 		
-		Returns: (prefix, indel_seq, suffix)
+
+		Args:
+			context_string: prefix[indel_sequence]suffix.
+			
+		Returns:
+			Tuple[prefix, indel_seq, suffix]
+
 		"""
 		try:
 			# 1. Find the opening bracket
@@ -64,40 +70,119 @@ class Processor:
 			logger.error(f"Failed to parse sequence context '{context_string}': {e}")
 			return "", "", ""
 		
-	def _is_homopolymer_run_at_breakpoint(self, prefix: str, indel_seq: str, suffix: str) -> bool:
+	def _is_homopolymer(self, prefix: str, indel_seq: str, suffix: str) -> bool:
 		"""
-		Checks if the indel (insertion/deletion) occurs as a single-base change 
-		within a homopolymer run. Filters out simple homopolymer stutter events.
-		"""
-		if len(indel_seq) != 1 or len(prefix) == 0 or len(suffix) == 0:
-			return False # Only filter simple single-base indels at this time
+		Checks if an indel is part of a homopolymer run of 3 or more identical bases.
 
+		This function is designed to filter sequencing artifacts where an indel of any
+		length (e.g., 'A', 'CC') occurs within or extends a homopolymer sequence.
+
+		Args:
+			prefix: The sequence immediately before the indel.
+			indel_seq: The sequence of the indel itself (e.g., 'A', 'GG').
+			suffix: The sequence immediately after the indel.
+
+		Returns:
+			True if the indel is part of a homopolymer run of 3+, False otherwise.
+		"""
+		# 1. The indel sequence must exist and must itself be a homopolymer
+		#    (e.g., 'A', 'GG', 'TTT'). It cannot be a mixed sequence like 'AG'.
+		if not indel_seq or len(set(indel_seq)) != 1:
+			return False
+
+		# 2. Get the single base that makes up the homopolymer indel.
 		indel_base = indel_seq[0]
-		
-		# Check if the base immediately flanking the breakpoint matches the indel base
-		if prefix[-1] == indel_base and suffix[0] == indel_base:
-			# Simple check: if prefix[-1] and suffix[0] match indel_base, assume it's part of a run.
-			logger.debug(f"Filtering homopolymer stutter: {prefix}[{indel_seq}]{suffix}")
+
+		# 3. Calculate the total length of the continuous homopolymer run
+		#    at the breakpoint by combining the indel and its flanking bases.
+
+		# Start with the length of the indel itself.
+		run_length = len(indel_seq)
+
+		# Count matching bases by looking backwards from the end of the prefix.
+		for char in reversed(prefix):
+			if char == indel_base:
+				run_length += 1
+			else:
+				# Stop counting as soon as the run is broken.
+				break
+
+		# Count matching bases by looking forwards from the start of the suffix.
+		for char in suffix:
+			if char == indel_base:
+				run_length += 1
+			else:
+				# Stop counting as soon as the run is broken.
+				break
+
+		# 4. Final decision: Is the total contiguous run length 3 or more?
+		if run_length >= 3:
+			logger.debug(
+				f"Filtering homopolymer: {prefix}[{indel_seq}]{suffix} "
+				f"(run of '{indel_base}' with total length {run_length})"
+			)
 			return True
-			
-		return False # Keep the record
+
+		return False
+
+	
+	def _is_adjacent_to_homopolymer(self, prefix: str, indel_seq: str, suffix: str, min_len: int = 3) -> bool:
+		"""
+		Checks if an indel is immediately adjacent to a homopolymer run of a minimum length.
+
+		This filter is broader than a simple stutter filter. It removes any indel,
+		regardless of its own sequence, if it touches a homopolymer run at the breakpoint.
+
+		Args:
+			prefix: The sequence immediately before the indel.
+			indel_seq: The sequence of the indel itself.
+			suffix: The sequence immediately after the indel.
+			min_len: The minimum length to define a homopolymer run (e.g., 3 for 'AAA').
+
+		Returns:
+			True if the indel is adjacent to a homopolymer run of min_len or more.
+		"""
+		# Check the prefix: Does it end in a homopolymer run of at least min_len?
+		if len(prefix) >= min_len:
+			# Check if the last `min_len` characters of the prefix are all the same
+			end_of_prefix = prefix[-min_len:]
+			if len(set(end_of_prefix)) == 1:
+				logger.debug(
+					f"Filtering: Indel {prefix}[{indel_seq}]{suffix} is adjacent "
+					f"to a homopolymer run in the prefix: '{end_of_prefix}'"
+				)
+				return True
+
+		# Check the suffix: Does it start with a homopolymer run of at least min_len?
+		if len(suffix) >= min_len:
+			# Check if the first `min_len` characters of the suffix are all the same
+			start_of_suffix = suffix[:min_len]
+			if len(set(start_of_suffix)) == 1:
+				logger.debug(
+					f"Filtering: Indel {prefix}[{indel_seq}]{suffix} is adjacent "
+					f"to a homopolymer run in the suffix: '{start_of_suffix}'"
+				)
+				return True
+
+		return False
+
 		
 	def process(self):
-		# Placeholder for processing logic
 		
 		"""
 		Main method to read the input file, filter, and separate outputs.
 		"""
+
 		if not self.bam_handle:
 			logger.error("Cannot run processing: BAM file not accessible.")
 			sys.exit(1)
 
-		logger.info(f"Processing indel file: {self.input_file}")
+		logger.info(f"Processing indel file: {self.config.input_file}")
 
 		# Define expected output header (for clarity, though we write data only)
 		OUTPUT_HEADER = ["contig", "position", "indel_type", "length", "prefix", "indel_seq", "suffix", "read_name"]
 
-		with open(self.input_file, 'r', newline='') as infile:
+		with open(self.config.input_file, 'r', newline='') as infile:
 			reader = csv.reader(infile, delimiter='\t')
 			
 			for i, row in enumerate(reader):
@@ -111,7 +196,7 @@ class Processor:
 				prefix, indel_seq, suffix = self._parse_sequence_context(context_string)
 				
 				# 2. Filter homopolymers
-				if self._is_homopolymer_run_at_breakpoint(prefix, indel_seq, suffix):
+				if self._is_homopolymer(prefix, indel_seq, suffix) or self._is_adjacent_to_homopolymer(prefix, indel_seq, suffix):
 					continue # Skip this record if it is a homopolymer
 
 				# 3. Store and separate outputs
@@ -119,9 +204,9 @@ class Processor:
 				processed_row = [contig, pos_str, indel_type, length_str, prefix, indel_seq, suffix, read_name]
 				self.processed_records.append(processed_row)
 
-				if indel_type == 'INS':
+				if indel_type == INDEL_TYPE.INSERTION:
 					self.insertion_output.append(processed_row)
-				elif indel_type == 'DEL':
+				elif indel_type == INDEL_TYPE.DELETION:
 					self.deletion_output.append(processed_row)
 
 		logger.info(f"Total records processed: {len(self.processed_records)}")
@@ -149,7 +234,7 @@ class Processor:
 			return None
 		
 		try:
-			# We fetch reads over a small region containing the position
+		
 			# This is generally faster than iterating all reads in the file.
 			# Position here is the 0-based coordinate immediately *before* the insertion site.
 			for read in self.bam_handle.fetch(contig, position, position + 1):
@@ -160,21 +245,20 @@ class Processor:
 					ref_pos = read.reference_start  # Position along the reference
 					
 					target_qualities = []
-					assert read is not None, logger.error("Read is None?")  # Read is None
-					assert read.query_sequence is not None, logger.error("Read has no query sequence")  # Read has no query sequence
+					assert read is not None, logger.error("Read is None?") 
+					assert read.query_sequence is not None, logger.error("Read has no query sequence")  
 					assert read.cigartuples is not None,logger.error("No CIGAR information available")
-					assert read.query_qualities is not None, logger.error("No quality scores available for read")  # No quality scores
+					assert read.query_qualities is not None, logger.error("No quality scores available for read") 
+					
 					for operation, length in read.cigartuples:
-						
-						
 						if operation == pysam.CINS: # Insertion relative to reference
 							if ref_pos == position:
-								# We found the insertion at the correct reference coordinate.
+								# found the insertion at the correct reference coordinate.
 								
 								# Check if the bases in the read match the reported insertion
 								read_insertion = read.query_sequence[query_pos:query_pos + length]
 								if read_insertion == inserted_sequence:
-									# Extract quality scores (stored as a list of integers)
+									
 									target_qualities = read.query_qualities[query_pos:query_pos + length]
 									return target_qualities # type: ignore
 								else:
@@ -198,7 +282,7 @@ class Processor:
 							# Soft clipping moves query position but not reference position in the aligned region
 							query_pos += length
 
-						# Other operations (H, P) are usually ignored in alignment parsing
+						
 
 			logger.warning(f"Target read '{read_name}' not found near {contig}:{position} or insertion CIGAR incorrect.")
 			return None
@@ -212,19 +296,7 @@ class Processor:
 
 
 	def query_deletion_flanking_quality(self, contig: str, position: int, length: int = 5, deleted_length: int = 1) -> str:
-		""" 
-		Queries the reference FASTA for base sequence/quality (e.g., N-bases) of the flanking region in a deletion. 
-		Checks 5bp upstream (prefix) and 5bp downstream (suffix) relative to the deleted region.
-
-		Args:
-			contig: Chromosome name.
-			position: Genomic position of the deletion start (0-based, first base of the deletion).
-			length: Length of the flanking region to query (default 5).
-			deleted_length: The length of the region that was deleted (used to calculate suffix start).
-
-		Returns:
-			A string showing the 5bp prefix, the deleted region's sequence (from FASTA), and the 5bp suffix.
-		"""
+		
 		if not self.reference:
 			return "Reference_Unavailable"
 		
@@ -261,9 +333,9 @@ class Processor:
 			return "FASTA_Query_Failed"
 
 	def write_output(self, base_output_path: str):
-		"""Writes the separated insertion and deletion records to disk."""
-		# Note: We need to define a consistent header for output files
-		OUTPUT_HEADER = ["contig", "position", "indel_type", "length", "prefix", "indel_seq", "suffix", "read_name"]
+		
+		
+		OUTPUT_HEADER = ["contig", "position", "indel_type", "length", "prefix", "indel_seq", "suffix", "read_name"] #wrong
 
 		ins_path = base_output_path.replace(".tsv", "_insertions.tsv")
 		del_path = base_output_path.replace(".tsv", "_deletions.tsv")
@@ -281,52 +353,18 @@ class Processor:
 			logger.info(f"Wrote {len(self.deletion_output)} deletions to {del_path}")
 
 
-# --- Helper for integration into main.py (Replacing placeholder) ---
-def run_processor(args):
-	""" Implementation of the 'process' sub-command. """
-	logger.info("Starting indel processing task...")
-
+# --- Helper for integration into main.py 
+def run_processor(config):
 	
+	logger.info("Starting indel processing task...")
 
 	# Initialize the processor
 	processor = Processor(
-		input_file=args.input,
-		bam_file=args.bam,  # Now required for the processor
-		fasta_file=args.fasta, # Now required for the processor
 		config=config
 	)
 
-	# Run the filtering and separation
-	insertions, deletions = processor.process()
+	processor.process()
 
-	# Write the separated outputs
-	processor.write_output(args.output)
-	
-	# Example of running an insertion quality query (for demonstration)
-	if insertions:
-		sample_ins = insertions[0]
-		# TSV row structure: [contig, pos_str, indel_type, length_str, prefix, indel_seq, suffix, read_name]
-		contig, pos_str, _, _, _, inserted_seq, _, read_name = sample_ins
-		pos = int(pos_str)
-		
-		quality_scores = processor.query_insertion_quality(
-			contig, pos, read_name, inserted_seq
-		) n
-		if quality_scores is not None:
-			avg_qual = sum(quality_scores) / len(quality_scores) if quality_scores else 0
-			logger.info(f"Sample insertion ({inserted_seq}) quality scores (Phred): {quality_scores}. Average: {avg_qual:.2f}")
-
-	# Example of running a deletion flanking reference check (for demonstration)
-	if deletions:
-		sample_del = deletions[0]
-		contig, pos_str, _, length_str, _, _, _, _ = sample_del
-		pos = int(pos_str)
-		deleted_length = int(length_str)
-		
-		# We query the sequence context including prefix, deleted base(s), and suffix from the FASTA
-		flanking_bases_context = processor.query_deletion_flanking_quality(
-			contig, pos, deleted_length=deleted_length, length=5 # 5bp flanking
-		)
-		logger.info(f"Sample deletion FASTA context ({contig}:{pos}): {flanking_bases_context}")
+	processor.write_output(config.output_path)
 
 	logger.info("Indel processing finished successfully.")
