@@ -4,8 +4,8 @@ from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, 
 from multiprocessing import Pool, cpu_count
 import logging
 
-from indel_scanner.scanner import run_scan, aggregate_partial_results
-from .scanner import ContigScanner
+from .scanner import ContigScanner, run_scan, aggregate_partial_results
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +44,8 @@ def parallel_scan(scannerconfig):
 			# Use imap_unordered to get results as soon as they are ready
 			results_iterator = pool.imap_unordered(partialfunc, contigs)
 			
-			# Iterate over the results from the workers
 			for result_file, status_message in results_iterator: # pyright: ignore[reportGeneralTypeIssues]
-				# If the worker sent back a status message, print it
 				if status_message:
-					# Use progress.print() instead of the standard print()
 					progress.print(status_message)
 
 				if result_file:

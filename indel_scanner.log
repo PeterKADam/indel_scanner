@@ -1,7 +1,0 @@
-2025-11-06 12:54:49,644 - WARNING - Configuration section 'scan' missing or empty in config.yaml.
-2025-11-06 12:54:49,644 - INFO - Configuration Mode: Scanner
-2025-11-06 12:54:49,644 - INFO - Found existing temporary directory at /home/peterkad/pkadmaster/indel_scanner/results/test/indels.tsv/temp_indel_parts. Cleaning it before use.
-2025-11-06 12:54:49,645 - INFO - Scanner output directories configured and cleaned.
-2025-11-06 12:54:49,645 - INFO - Using 4 parallel processes.
-2025-11-06 12:54:49,645 - INFO - Starting indel scanning process...
-2025-11-06 12:54:49,851 - INFO - found 1409 contigs.

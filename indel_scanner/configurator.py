@@ -34,6 +34,7 @@ class ScannerConfig(BaseConfig):
 	min_indel_size: int
 	preload: bool
 	buffer_size: int
+	
 	def __init__(self, args: argparse.Namespace, config_data: dict):
 		super().__init__(args, config_data)
 		self._initialize_mode_specific_attributes()
@@ -41,9 +42,9 @@ class ScannerConfig(BaseConfig):
 	def _setup_output(self) -> Tuple[Path, Path]:
 		"""Performs critical directory setup and cleanup for the scanner."""
 		output_path = self.output_path
-		self.temp_dir = output_path / "temp_indel_parts"
+		self.temp_dir = output_path.parent / "temp_indel_parts"
 		try:
-			output_path.mkdir(parents=True, exist_ok=True)
+			output_path.parent.mkdir(parents=True, exist_ok=True)
 			logger.debug(f"Output directory set up at {output_path}")
 			
 			# CRITICAL SCANNER LOGIC: Clean up the temp directory before starting

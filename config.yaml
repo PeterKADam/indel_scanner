@@ -3,7 +3,7 @@
 # ==================================
 # SCANNER CONFIGURATION (for 'scan' command)
 # ==================================
-scanner:
+scan:
   # --- Analysis Parameters ---
   min_indel_size: 1
   min_mapping_quality: 20

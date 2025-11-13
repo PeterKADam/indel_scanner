@@ -11,7 +11,6 @@ from .indel import INDEL_TYPE, Insertion, Deletion
 from .utils import Cigar, cleanup_temp_dir
 from .configurator import ScannerConfig
 
-
 logger = logging.getLogger(__name__)
 
 class ContigScanner:
@@ -26,20 +25,23 @@ class ContigScanner:
 		"""
 		self.config = config
 
-	def scan_contig(self, contig_name:str):
+	def scan_contig(self, contig_name:str) -> tuple[Path, str] | None:
 	   
-		temp_output_path = self.config.temp_dir / f"{contig_name}.part.tsv"
-		
 		try:
 			with pysam.AlignmentFile(str(self.config.bamfile), "rb") as samfile:
-				fasta = pyfastx.Fasta(self.config.fastafile) # dosnt support context manager????
+				temp_output_path = self.config.temp_dir / f"{contig_name}.part.tsv"
 				
+				fasta = pyfastx.Fasta(str(self.config.fastafile)) # dosnt support context manager????
+				logger.info(f"Scanning contig: {contig_name} @ {temp_output_path} \n with {(str(self.config.bamfile))} and {(str(self.config.fastafile))}")
 				return self._process_reads(samfile, fasta, contig_name, temp_output_path)
+			
 		except Exception as e:
+			logger.info(f"Error opening or processing files for contig {contig_name}: {e}")
 			logger.error(f"Error opening or processing files for contig {contig_name}: {e}")
 			return None
+
 		
-	def _parse_cigar(self, read: pysam.AlignedSegment, contig_seq: pyfastx.Sequence) -> Generator[Insertion|Deletion]:
+	def _parse_cigar(self, read: pysam.AlignedSegment, contig_seq: str) -> Generator[Insertion|Deletion]:
 		"""
 		Generator function to parse a CIGAR string and yield indel records.
 		This isolates the core indel detection logic.
@@ -54,8 +56,12 @@ class ContigScanner:
 		assert read.query_name is not None,logger.error("No query_name information available")
 
 		for op, length in read.cigartuples:
+
+			logger.debug(f"Processing CIGAR operation {op} with length {length} at ref pos {ref_pos}, query pos {query_pos} in read {read.query_name}")
 			if op == Cigar.OP_I:
+				logger.info(f"Found insertion of length {length} at ref pos {ref_pos}, query pos {query_pos} in read {read.query_name}")
 				if length >= self.config.min_indel_size:
+					logger.debug(f"insertion passed min size {self.config.min_indel_size}")
 					prefix_context = read.query_sequence[max(0, query_pos - 5): query_pos]
 					indel_seq = read.query_sequence[query_pos: query_pos + length]
 					suffix_context = read.query_sequence[query_pos + length: query_pos + length + 5]
@@ -77,16 +83,11 @@ class ContigScanner:
 			elif op == Cigar.OP_D:
 				if length >= self.config.min_indel_size:
 
-					if isinstance(contig_seq, str):
-						# preloaded contig sequence
-						ref_seq = contig_seq[ref_pos: ref_pos + length]
-						prefix_context = contig_seq[max(0, ref_pos - 5): ref_pos]
-						suffix_context = contig_seq[ref_pos+ length:ref_pos+length + 5]
-					else:
-					# pyfastx handles fetching sequence data efficiently
-						ref_seq = contig_seq[ref_pos: ref_pos + length].seq
-						prefix_context = contig_seq[max(0, ref_pos - 5): ref_pos].seq
-						suffix_context = contig_seq[ref_pos + length + 5].seq
+					# preloaded contig sequence
+					ref_seq = contig_seq[ref_pos: ref_pos + length]
+					prefix_context = contig_seq[max(0, ref_pos - 5): ref_pos]
+					suffix_context = contig_seq[ref_pos+ length:ref_pos+length + 5]
+					
 					yield Deletion(
 									contig=read.reference_name,
 									ref_position=ref_pos,
@@ -112,15 +113,14 @@ class ContigScanner:
 		and writes them to a file using a buffer.
 		"""
 		start_time = time.time()
+		#logger.info(f"Processing reads for contig: {contig_name}")
 		
 		# This fixes the UnboundLocalError bug. 
 		# `contig_seq` is now always defined.
-		if self.config.preload:
-			# If preloading, it's a string.
-			contig_seq = fasta[contig_name].seq
-		else:
-			# If not, it's a pyfastx.Sequence object which fetches sequence on-demand.
-			contig_seq = fasta[contig_name]
+		
+		contig_seq = fasta[contig_name].seq
+		
+		logger.debug(f"Loaded contig sequence for {contig_name}, length: {len(contig_seq)}")
 
 		BUFFER_SIZE = self.config.buffer_size
 		results_buffer = []
@@ -131,9 +131,11 @@ class ContigScanner:
 					read.is_secondary or
 					read.is_supplementary or
 					read.query_sequence is None):
+					#logger.info(f"Skipping read {read.query_name}: unmapped{read.is_unmapped}/secondary{read.is_secondary}/supplementary{read.is_supplementary}/no sequence{bool(read.query_sequence is None)}")
 					continue
 
 				for indel in self._parse_cigar(read, contig_seq):
+					logger.info(f"Detected indel: {indel}")
 					results_buffer.append(indel.to_tsv_row())
 				
 				if len(results_buffer) >= BUFFER_SIZE:
