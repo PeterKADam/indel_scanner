@@ -11,7 +11,7 @@ CONFIG_FILE="config.yaml"
 
 
 
-# Run the scanner
+# Run the processor
 # This assumes you run it from the root of the 'indel_scanner' project directory
 python -m indel_scanner.main process\
 	--input "$OUTPUT_FILE" \

@@ -1,12 +1,27 @@
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum, StrEnum
 from abc import ABC, abstractmethod
 from typing import List, Optional
+
+
+def _format_quality_scores(scores: Optional[List[int]]) -> str:
+	"""Converts a list of integers into a comma-separated string."""
+	if scores is None:
+		return "NA" # Use "NA" to signify missing data
+	return ",".join(map(str, scores))
 
 class INDEL_TYPE(StrEnum):
 	INSERTION = 'ins'
 	DELETION = 'del'
 
+class TSV_HEADERS(Enum):
+	SCANNER = [
+    "contig", "ref_position", "type", "length", "[sequence]_context" "read_name"
+	]
+	PROCESSOR = SCANNER + [
+    "prefix_quality", "insertion_quality", "suffix_quality"
+	]
+	
 @dataclass
 class Indel(ABC):
 	contig:str
@@ -17,47 +32,68 @@ class Indel(ABC):
 	read_name:str
 	type:INDEL_TYPE
 	
-
 	@property
 	@abstractmethod    
 	def tsv_sequence_field(self) -> str:
 		pass
 
-	def to_tsv_row(self) -> str:
-		"""Defines the common formatting logic for the entire TSV row."""
-		return '\t'.join([
+	def to_scanner_tsv_row(self) -> List[str]:
+		return [
 			self.contig,
 			str(self.ref_position),
 			self.type.value,
 			str(self.length),
-			self.prefix_context,
-			self.tsv_sequence_field,#  abstract property 
-			self.suffix_context,
-			self.read_name
-		])
+			self.sequencecontext(),
+			self.read_name,
+		]
+	
+	def sequencecontext(self) -> str:
+		return f"{self.prefix_context}[{self.tsv_sequence_field}]{self.suffix_context}"
+	
+	@abstractmethod
+	def to_processor_tsv_row(self) -> List[str]:
+		pass
 
 @dataclass
 class Insertion(Indel):
-	inserted_seq:str
 
-	@property
-	def tsv_sequence_field(self) -> str:	
-		return self.inserted_seq
+	inserted_seq:str
 
 	insertion_quality:Optional[List[int]] = None
 	prefix_quality:Optional[List[int]] = None
 	suffix_quality:Optional[List[int]] = None
 
+	@property
+	def tsv_sequence_field(self) -> str:	
+		return self.inserted_seq
+	
+	def to_processor_tsv_row(self) -> List[str]:
+		base_row = self.to_scanner_tsv_row()
+		base_row.extend([
+			_format_quality_scores(self.prefix_quality),
+			_format_quality_scores(self.insertion_quality),
+			_format_quality_scores(self.suffix_quality),
+		])
+		return base_row
 	
 
 @dataclass
 class Deletion(Indel):
 	reference_seq:str
 	
+	prefix_quality:Optional[List[int]] = None
+	suffix_quality:Optional[List[int]] = None
+
 	@property
 	def tsv_sequence_field(self) -> str:	
 		return self.reference_seq
 	
-	prefix_quality:Optional[List[int]] = None
-	suffix_quality:Optional[List[int]] = None
-	
+	def to_processor_tsv_row(self) -> List[str]:
+		
+		base_row = self.to_scanner_tsv_row()
+		base_row.extend([
+			_format_quality_scores(self.prefix_quality),
+			"NA",  # Placeholder for insertion_quality
+			_format_quality_scores(self.suffix_quality),
+		])
+		return base_row
