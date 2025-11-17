@@ -46,8 +46,8 @@ class ContigScanner:
 		Generator function to parse a CIGAR string and yield indel records.
 		This isolates the core indel detection logic.
 		"""
-		ref_pos = read.reference_start
-		query_pos = 0
+		ref_pos_tracker = read.reference_start
+		read_pos_tracker = 0
 
 		assert read is not None, logger.error("Read is None?")  # Read is None
 		assert read.query_sequence is not None, logger.error("Read has no query sequence")  # Read has no query sequence
@@ -55,21 +55,28 @@ class ContigScanner:
 		assert read.reference_name is not None,logger.error("No reference_name information available")
 		assert read.query_name is not None,logger.error("No query_name information available")
 
+		REF_CONSUMING_OPS = {Cigar.OP_M, Cigar.OP_D, Cigar.OP_N, Cigar.OP_EQ, Cigar.OP_X}
+		READ_CONSUMING_OPS = {Cigar.OP_M, Cigar.OP_I, Cigar.OP_S, Cigar.OP_EQ, Cigar.OP_X}
+
 		for op, length in read.cigartuples:
 
-			logger.debug(f"Processing CIGAR operation {op} with length {length} at ref pos {ref_pos}, query pos {query_pos} in read {read.query_name}")
-			if op == Cigar.OP_I:
-				logger.debug(f"Found insertion of length {length} at ref pos {ref_pos}, query pos {query_pos} in read {read.query_name}")
+			logger.debug(f"Processing CIGAR operation {op} with length {length} at ref pos {ref_pos_tracker}, query pos {read_pos_tracker} in read {read.query_name}")
+			
+			if (op not in READ_CONSUMING_OPS) or (op not in REF_CONSUMING_OPS):
+				logger.warning(f"op {op} was not caught in math")
+			
+			elif op == Cigar.OP_I:
+				logger.debug(f"Found insertion of length {length} at ref pos {ref_pos_tracker}, query pos {read_pos_tracker} in read {read.query_name}")
 				if length >= self.config.min_indel_size:
 					logger.debug(f"insertion passed min size {self.config.min_indel_size}")
-					prefix_context = read.query_sequence[max(0, query_pos - 5): query_pos]
-					indel_seq = read.query_sequence[query_pos: query_pos + length]
-					suffix_context = read.query_sequence[query_pos + length: query_pos + length + 5]
+					prefix_context = read.query_sequence[max(0, read_pos_tracker - 5): read_pos_tracker]
+					indel_seq = read.query_sequence[read_pos_tracker: read_pos_tracker + length]
+					suffix_context = read.query_sequence[read_pos_tracker + length: read_pos_tracker + length + 5]
 					
 
 					yield Insertion(
 									contig=read.reference_name,
-									ref_position=ref_pos,
+									ref_position=ref_pos_tracker,
 									type=INDEL_TYPE.INSERTION,
 									length=length,
 									prefix_context=prefix_context,
@@ -77,20 +84,18 @@ class ContigScanner:
 									read_name=read.query_name,
 									inserted_seq=indel_seq
 									)
-
-				query_pos += length
-
-			elif op == Cigar.OP_D:
+				
+			elif op ==  Cigar.OP_D:
 				if length >= self.config.min_indel_size:
 
 					# preloaded contig sequence
-					ref_seq = contig_seq[ref_pos: ref_pos + length]
-					prefix_context = contig_seq[max(0, ref_pos - 5): ref_pos]
-					suffix_context = contig_seq[ref_pos+ length:ref_pos+length + 5]
+					ref_seq = contig_seq[ref_pos_tracker: ref_pos_tracker + length]
+					prefix_context = contig_seq[max(0, ref_pos_tracker - 5): ref_pos_tracker]
+					suffix_context = contig_seq[ref_pos_tracker+ length:ref_pos_tracker+length + 5]
 					
 					yield Deletion(
 									contig=read.reference_name,
-									ref_position=ref_pos,
+									ref_position=ref_pos_tracker,
 									type=INDEL_TYPE.DELETION,
 									length=length,
 									prefix_context=prefix_context,
@@ -98,14 +103,10 @@ class ContigScanner:
 									suffix_context=suffix_context,
 									read_name=read.query_name,
 									)
-				ref_pos += length
-			elif op in [Cigar.OP_M, Cigar.OP_EQ, Cigar.OP_X]:
-				ref_pos += length
-				query_pos += length
-			elif op == Cigar.OP_N:  # N is for introns, skips reference
-				ref_pos += length
-			elif op == Cigar.OP_S:  # S is soft-clip, consumes query
-				query_pos += length	
+			if op in REF_CONSUMING_OPS:
+				ref_pos_tracker += length
+			if op in READ_CONSUMING_OPS:
+				read_pos_tracker += length
 
 	def _process_reads(self, samfile: pysam.AlignmentFile, fasta: pyfastx.Fasta, contig_name: str, temp_output_path: Path):
 		"""
@@ -129,7 +130,6 @@ class ContigScanner:
 					read.is_secondary or
 					read.is_supplementary or
 					read.query_sequence is None):
-					#logger.info(f"Skipping read {read.query_name}: unmapped{read.is_unmapped}/secondary{read.is_secondary}/supplementary{read.is_supplementary}/no sequence{bool(read.query_sequence is None)}")
 					continue
 
 				for indel in self._parse_cigar(read, contig_seq):
@@ -147,7 +147,6 @@ class ContigScanner:
 
 		end_time = time.time()
 		return (temp_output_path, f"Finished {contig_name} in {end_time - start_time:.2f} s")
-
 
 def run_scan(scanner:ContigScanner, contig_name):
 	return scanner.scan_contig(contig_name)

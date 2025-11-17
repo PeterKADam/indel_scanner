@@ -51,7 +51,7 @@ class Processor:
 			logger.debug(f"Closed BAM file handle for {self.config.bamfile}")
 
 	def _load_and_filter_indels(self):
-  
+
 		logger.info(f"Loading and filtering indels from {self.config.input_file}...")
 		
 		try:
@@ -102,7 +102,6 @@ class Processor:
 		
 		num_indels = sum(len(indels) for reads in self.indels_by_contig.values() for indels in reads.values())
 		logger.info(f"Loaded {num_indels} indels across {len(self.indels_by_contig)} contigs.")
-
 
 	def _process_bam_file(self):
 		if not self.bam_handle:
@@ -215,9 +214,7 @@ class Processor:
 
 		if not found_deletion:
 			logger.debug(f"CIGAR parsing failed to find a matching deletion for {deletion.read_name}")
-
-
-	
+			
 	def _parse_sequence_context(self, context_string: str) -> Tuple[str, str, str]:
 	   
 		try:
