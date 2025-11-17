@@ -41,7 +41,7 @@ class ContigScanner:
 			return None
 
 		
-	def _parse_cigar(self, read: pysam.AlignedSegment, contig_seq: str) -> Generator[Insertion|Deletion]:
+	def _parse_cigar(self, read: pysam.AlignedSegment, fasta: pyfastx.Fasta, contig_name:str) -> Generator[Insertion|Deletion]:
 		"""
 		Generator function to parse a CIGAR string and yield indel records.
 		This isolates the core indel detection logic.
@@ -87,7 +87,8 @@ class ContigScanner:
 				
 			elif op ==  Cigar.OP_D:
 				if length >= self.config.min_indel_size:
-
+					
+					contig_seq = fasta[contig_name].seq
 					# preloaded contig sequence
 					ref_seq = contig_seq[ref_pos_tracker: ref_pos_tracker + length]
 					prefix_context = contig_seq[max(0, ref_pos_tracker - 5): ref_pos_tracker]
@@ -115,9 +116,9 @@ class ContigScanner:
 		"""
 		start_time = time.time()
 		
-		contig_seq = fasta[contig_name].seq
 		
-		logger.debug(f"Loaded contig sequence for {contig_name}, length: {len(contig_seq)}")
+		
+		logger.debug(f"Loaded contig sequence for {contig_name})")
 
 		BUFFER_SIZE = self.config.buffer_size
 		results_buffer = []
@@ -132,7 +133,7 @@ class ContigScanner:
 					read.query_sequence is None):
 					continue
 
-				for indel in self._parse_cigar(read, contig_seq):
+				for indel in self._parse_cigar(read,fasta,contig_name):
 					logger.debug(f"Detected indel: {indel}")
 					results_buffer.append(indel.to_scanner_tsv_row())
 				
