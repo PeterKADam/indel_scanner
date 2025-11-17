@@ -1,6 +1,5 @@
 
 import logging
-import shutil
 from pathlib import Path
 import pysam
 from enum import Enum, IntEnum
@@ -20,9 +19,6 @@ class Cigar(IntEnum):
 	OP_S = pysam.CSOFT_CLIP
 	
 
-def cleanup_temp_dir(temp_dir):
-	logger.debug(f"Cleaning up temporary files in {temp_dir}")	
-	shutil.rmtree(temp_dir)
 
 
 

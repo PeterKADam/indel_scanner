@@ -9,6 +9,8 @@ import pysam
 from pysam import AlignedSegment
 from typing import List, Optional, Tuple, Union, Dict
 
+from indel_scanner.IO import _write_records_to_tsv
+
 from .indel import INDEL_TYPE, TSV_HEADERS
 from .indel import Insertion, Deletion
 from .utils import Cigar
@@ -261,30 +263,32 @@ class Processor:
 				return True
 		return False
 
-	def _write_indels_to_file(self, output_path: Path, records: List[Union[Insertion, Deletion]]):
-		if not records:
-			logger.info(f"No records to write for {output_path.name}, skipping.")
-			return
-		logger.info(f"Writing {len(records)} enriched records to {output_path}...")
-		try:
-			sorted_records = sorted(records, key=lambda r: (r.contig, r.ref_position))
-			with open(output_path, 'w', newline='') as outfile:
-				writer = csv.writer(outfile, delimiter='\t')
-				writer.writerow(TSV_HEADERS.PROCESSOR.value)
-				for record in sorted_records:
-					writer.writerow(record.to_processor_tsv_row())
-			logger.info(f"Successfully wrote to {output_path}.")
-		except IOError as e:
-			logger.error(f"Failed to write output file at {output_path}: {e}")
-
-	def write_output(self, insertions_path: Optional[Path] = None, deletions_path: Optional[Path] = None):
+	def write_output(
+		self,
+		insertions_path: Optional[Path] = None,
+		deletions_path: Optional[Path] = None
+	):
 		if not any([insertions_path, deletions_path]):
 			logger.warning("write_output called, but no output paths were provided.")
 			return
-		if insertions_path:
-			self._write_indels_to_file(insertions_path, self.insertion_output) # type: ignore
-		if deletions_path:
-			self._write_indels_to_file(deletions_path, self.deletion_output) # type: ignore
+
+		if insertions_path and self.insertion_output:
+			_write_records_to_tsv(
+				output_path=insertions_path,
+				records=self.insertion_output,
+				row_converter=lambda r: r.to_processor_tsv_row(),
+				header=TSV_HEADERS["PROCESSOR"].value,
+				sort_key=lambda r: (r.contig, r.ref_position)
+			)
+
+		if deletions_path and self.deletion_output:
+			_write_records_to_tsv(
+				output_path=deletions_path,
+				records=self.deletion_output,
+				row_converter=lambda r: r.to_processor_tsv_row(),
+				header=TSV_HEADERS["PROCESSOR"].value,
+				sort_key=lambda r: (r.contig, r.ref_position)
+			)
 
 
 def run_processor(config):

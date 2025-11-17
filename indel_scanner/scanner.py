@@ -2,13 +2,15 @@
 import csv
 import os
 from pathlib import Path
-from typing import Generator, List
+from typing import Generator, Iterable, List, Union
 import pysam
 import pyfastx
 import time
 import logging
+
+from indel_scanner.IO import _write_records_to_tsv, cleanup_temp_dir
 from .indel import INDEL_TYPE, TSV_HEADERS, Insertion, Deletion
-from .utils import Cigar, cleanup_temp_dir
+from .utils import Cigar
 from .configurator import ScannerConfig
 
 logger = logging.getLogger(__name__)
@@ -63,51 +65,57 @@ class ContigScanner:
 			logger.debug(f"Processing CIGAR operation {op} with length {length} at ref pos {ref_pos_tracker}, query pos {read_pos_tracker} in read {read.query_name}")
 			
 			if (op not in READ_CONSUMING_OPS) or (op not in REF_CONSUMING_OPS):
-				logger.warning(f"op {op} was not caught in math")
+				logger.warning(f"op {op} was not caught")
 			
 			elif op == Cigar.OP_I:
 				logger.debug(f"Found insertion of length {length} at ref pos {ref_pos_tracker}, query pos {read_pos_tracker} in read {read.query_name}")
 				if length >= self.config.min_indel_size:
 					logger.debug(f"insertion passed min size {self.config.min_indel_size}")
-					prefix_context = read.query_sequence[max(0, read_pos_tracker - 5): read_pos_tracker]
-					indel_seq = read.query_sequence[read_pos_tracker: read_pos_tracker + length]
-					suffix_context = read.query_sequence[read_pos_tracker + length: read_pos_tracker + length + 5]
-					
 
 					yield Insertion(
 									contig=read.reference_name,
 									ref_position=ref_pos_tracker,
 									type=INDEL_TYPE.INSERTION,
 									length=length,
-									prefix_context=prefix_context,
-									suffix_context=suffix_context,
+									prefix_context=read.query_sequence[max(0, read_pos_tracker - 5): read_pos_tracker],
+									suffix_context=read.query_sequence[read_pos_tracker + length: read_pos_tracker + length + 5],
 									read_name=read.query_name,
-									inserted_seq=indel_seq
+									inserted_seq=read.query_sequence[read_pos_tracker: read_pos_tracker + length]
 									)
 				
 			elif op ==  Cigar.OP_D:
 				if length >= self.config.min_indel_size:
 					
 					contig_seq = fasta[contig_name].seq
-					# preloaded contig sequence
-					ref_seq = contig_seq[ref_pos_tracker: ref_pos_tracker + length]
-					prefix_context = contig_seq[max(0, ref_pos_tracker - 5): ref_pos_tracker]
-					suffix_context = contig_seq[ref_pos_tracker+ length:ref_pos_tracker+length + 5]
 					
 					yield Deletion(
 									contig=read.reference_name,
 									ref_position=ref_pos_tracker,
 									type=INDEL_TYPE.DELETION,
 									length=length,
-									prefix_context=prefix_context,
-									reference_seq=ref_seq,
-									suffix_context=suffix_context,
+									prefix_context=contig_seq[max(0, ref_pos_tracker - 5): ref_pos_tracker],
+									reference_seq=contig_seq[ref_pos_tracker: ref_pos_tracker + length],
+									suffix_context=contig_seq[ref_pos_tracker+ length:ref_pos_tracker+length + 5],
 									read_name=read.query_name,
 									)
 			if op in REF_CONSUMING_OPS:
 				ref_pos_tracker += length
 			if op in READ_CONSUMING_OPS:
 				read_pos_tracker += length
+
+	def _generate_indels_from_contig(
+		self,
+		samfile: pysam.AlignmentFile,
+		fasta: pyfastx.Fasta,
+		contig_name: str
+	) -> Iterable[Union[Insertion, Deletion]]:
+		
+		for read in samfile.fetch(contig=contig_name):
+			if (read.is_unmapped or read.is_secondary or
+				read.is_supplementary or read.query_sequence is None):
+				continue
+			
+			yield from self._parse_cigar(read, fasta, contig_name)
 
 	def _process_reads(self, samfile: pysam.AlignmentFile, fasta: pyfastx.Fasta, contig_name: str, temp_output_path: Path):
 		"""
@@ -116,35 +124,18 @@ class ContigScanner:
 		"""
 		start_time = time.time()
 		
+		indel_generator = self._generate_indels_from_contig(samfile, fasta, contig_name)
 		
-		
-		logger.debug(f"Loaded contig sequence for {contig_name})")
-
 		BUFFER_SIZE = self.config.buffer_size
 		results_buffer = []
 
-		with open(temp_output_path, 'w') as f_out:
-			writer = csv.writer(f_out, delimiter='\t')
-
-			for read in samfile.fetch(contig=contig_name):
-				if (read.is_unmapped or
-					read.is_secondary or
-					read.is_supplementary or
-					read.query_sequence is None):
-					continue
-
-				for indel in self._parse_cigar(read,fasta,contig_name):
-					logger.debug(f"Detected indel: {indel}")
-					results_buffer.append(indel.to_scanner_tsv_row())
-				
-				if len(results_buffer) >= BUFFER_SIZE:
-					# Optimized writing without the csv module
-					writer.writerows(results_buffer)
-					results_buffer.clear()
-			
-			# Write any remaining results in the buffer
-			if results_buffer:
-				writer.writerows(results_buffer)
+		_write_records_to_tsv(
+            output_path=temp_output_path,
+            records=indel_generator,
+            row_converter=lambda indel: indel.to_scanner_tsv_row(),
+            buffer_size=self.config.buffer_size
+            # No header or sorting for this temporary file
+        )
 
 		end_time = time.time()
 		return (temp_output_path, f"Finished {contig_name} in {end_time - start_time:.2f} s")
