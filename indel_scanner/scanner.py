@@ -125,9 +125,6 @@ class ContigScanner:
 		start_time = time.time()
 		
 		indel_generator = self._generate_indels_from_contig(samfile, fasta, contig_name)
-		
-		BUFFER_SIZE = self.config.buffer_size
-		results_buffer = []
 
 		_write_records_to_tsv(
             output_path=temp_output_path,
