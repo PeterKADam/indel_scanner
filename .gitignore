@@ -2,3 +2,4 @@ results/*
 .vscode
 __pycache__
 *.log
+.idea/

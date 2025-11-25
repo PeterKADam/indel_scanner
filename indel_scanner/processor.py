@@ -1,4 +1,3 @@
-from pathlib import Path
 import sys
 import logging
 import csv
@@ -7,7 +6,7 @@ from collections import defaultdict
 import pyfastx
 import pysam
 from pysam import AlignedSegment
-from typing import List, Optional, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict
 
 from indel_scanner.IO import _write_records_to_tsv
 
@@ -25,6 +24,7 @@ REF_CONSUMING_OPS = {
     Cigar.OP_EQ,
     Cigar.OP_X,
 }
+
 READ_CONSUMING_OPS = {
     Cigar.OP_M,
     Cigar.OP_I,
@@ -364,9 +364,7 @@ class Processor:
 
         return False
 
-    def _is_adjacent_to_homopolymer(
-        self, prefix: str, indel_seq: str, suffix: str, min_len: int = 3
-    ) -> bool:
+    def _is_adjacent_to_homopolymer(self, prefix: str, suffix: str, min_len: int = 3) -> bool:
         if len(prefix) >= min_len:
             end_of_prefix = prefix[-min_len:]
             if len(set(end_of_prefix)) == 1:
@@ -401,7 +399,7 @@ class Processor:
             return True
 
         #  Adjacent‑only check
-        if self._is_adjacent_to_homopolymer(prefix, indel_seq, suffix, min_len):
+        if self._is_adjacent_to_homopolymer(prefix, suffix, min_len):
             return True
 
         return False
