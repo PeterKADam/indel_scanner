@@ -83,6 +83,7 @@ class Processor:
                         indel_type = INDEL_TYPE(row["Type"])
                         context_string = row["Sequence"]
                         read_name = row["Read_Name"]
+                        in_STR = row["In_STR"].strip().lower() == "true"
 
                     except (ValueError, KeyError, TypeError) as e:
                         logger.warning(
@@ -108,6 +109,7 @@ class Processor:
                             read_name=read_name,
                             type=indel_type,
                             inserted_seq=indel_seq,
+                            in_STR=in_STR,
                         )
                     elif indel_type == INDEL_TYPE.DELETION:
                         ref_seq = self.reference.fetch(  # type: ignore
@@ -120,6 +122,7 @@ class Processor:
                             prefix_context=prefix,
                             suffix_context=suffix,
                             read_name=read_name,
+                            in_STR=in_STR,
                             type=indel_type,
                             reference_seq=ref_seq,
                         )
