@@ -33,6 +33,7 @@ class ScannerConfig(BaseConfig):
     min_indel_size: int
     preload: bool
     buffer_size: int
+    str_directory: Path
 
     def __init__(self, args: argparse.Namespace, config_data: dict):
         super().__init__(args, config_data)
@@ -71,6 +72,7 @@ class ScannerConfig(BaseConfig):
         self.min_indel_size: int = self.yaml.get("min_indel_size", 1)
         self.preload: bool = self.yaml.get("preload_contigs", True)
         self.buffer_size: int = self.yaml.get("write_buffer_size", 100)
+        self.str_directory: Path = Path(self.yaml.get("strdir"))#type: ignore
 
         # Run Scanner-specific action: Directory setup
         self._setup_output()
@@ -148,6 +150,9 @@ class Config:
             "--config",
             default="config.yaml",
             help="Path to the configuration file.",
+        )
+        scan_parser.add_argument(
+            "-s", "--strdir", required=True, help="Directory containing STR results."
         )
         scan_parser.add_argument(
             "--process",

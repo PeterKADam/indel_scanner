@@ -157,6 +157,7 @@ class Processor:
                 if bam_read.query_name in indels_on_this_contig:
                     target_indels = indels_on_this_contig[bam_read.query_name]
                     for indel_obj in target_indels:
+                        indel_obj.map_quality = bam_read.mapping_quality
                         if indel_obj.type == INDEL_TYPE.INSERTION:
                             self._populate_insertion_quality(bam_read, indel_obj)  # type: ignore
                             self.insertion_output.append(indel_obj)  # type: ignore
@@ -364,7 +365,9 @@ class Processor:
 
         return False
 
-    def _is_adjacent_to_homopolymer(self, prefix: str, suffix: str, min_len: int = 3) -> bool:
+    def _is_adjacent_to_homopolymer(
+        self, prefix: str, suffix: str, min_len: int = 3
+    ) -> bool:
         if len(prefix) >= min_len:
             end_of_prefix = prefix[-min_len:]
             if len(set(end_of_prefix)) == 1:

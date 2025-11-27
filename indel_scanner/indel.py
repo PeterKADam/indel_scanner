@@ -24,8 +24,14 @@ class TSV_HEADERS(Enum):
         "length",
         "[sequence]_context",
         "read_name",
+        "in_STR",
     ]
-    PROCESSOR = SCANNER + ["prefix_quality", "insertion_quality", "suffix_quality"]
+    PROCESSOR = SCANNER + [
+        "prefix_quality",
+        "insertion_quality",
+        "suffix_quality",
+        "map_quality",
+    ]
 
 
 @dataclass
@@ -37,6 +43,8 @@ class Indel(ABC):
     suffix_context: str
     read_name: str
     type: INDEL_TYPE
+    in_STR: bool
+    map_quality: Optional[int] = None
 
     @property
     @abstractmethod
@@ -51,6 +59,7 @@ class Indel(ABC):
             str(self.length),
             self.sequencecontext(),
             self.read_name,
+            str(self.in_STR),
         ]
 
     def sequencecontext(self) -> str:
@@ -63,7 +72,7 @@ class Indel(ABC):
 
 @dataclass
 class Insertion(Indel):
-    inserted_seq: str
+    inserted_seq: str  # type: ignore
 
     insertion_quality: Optional[List[int]] = None
     prefix_quality: Optional[List[int]] = None
@@ -80,6 +89,7 @@ class Insertion(Indel):
                 _format_quality_scores(self.prefix_quality),
                 _format_quality_scores(self.insertion_quality),
                 _format_quality_scores(self.suffix_quality),
+                str(self.map_quality),  # should never be None, #pray
             ]
         )
         return base_row
@@ -87,7 +97,7 @@ class Insertion(Indel):
 
 @dataclass
 class Deletion(Indel):
-    reference_seq: str
+    reference_seq: str  # type: ignore
 
     prefix_quality: Optional[List[int]] = None
     suffix_quality: Optional[List[int]] = None
@@ -103,6 +113,7 @@ class Deletion(Indel):
                 _format_quality_scores(self.prefix_quality),
                 "NA",  # Placeholder for insertion_quality
                 _format_quality_scores(self.suffix_quality),
+                str(self.map_quality),
             ]
         )
         return base_row

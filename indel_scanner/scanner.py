@@ -2,13 +2,14 @@
 import csv
 import os
 from pathlib import Path
-from typing import Generator, Iterable, Union
+from typing import Generator, Iterable, List, Tuple, Union
 import pysam
 import pyfastx
 import time
 import logging
 
 from indel_scanner.IO import _write_records_to_tsv, cleanup_temp_dir
+from indel_scanner.indel_scanner.STR_Classifier import STRClassifier
 from .indel import INDEL_TYPE, TSV_HEADERS, Insertion, Deletion
 from .utils import Cigar, as_cigar
 from .configurator import ScannerConfig
@@ -69,7 +70,6 @@ class ContigScanner:
     def _parse_cigar(
         self, read: pysam.AlignedSegment, fasta: pyfastx.Fasta, contig_name: str
     ) -> Generator[Insertion | Deletion]:
-       
         ref_pos_tracker = read.reference_start
         read_pos_tracker = 0
 
@@ -87,6 +87,8 @@ class ContigScanner:
             "No query_name information available"
         )
 
+        STR_Classifier = STRClassifier(self.config, contig_name)
+        STR_Classifier.is_in_str(ref_pos_tracker)
         for op_int, length in read.cigartuples:
             op = as_cigar(op_int)
             logger.debug(
@@ -117,6 +119,7 @@ class ContigScanner:
                             read_pos_tracker + length : read_pos_tracker + length + 5
                         ],
                         read_name=read.query_name,
+                        in_STR=STR_Classifier.is_in_str(ref_pos_tracker),
                         inserted_seq=read.query_sequence[
                             read_pos_tracker : read_pos_tracker + length
                         ],
@@ -141,6 +144,7 @@ class ContigScanner:
                             ref_pos_tracker + length : ref_pos_tracker + length + 5
                         ],
                         read_name=read.query_name,
+                        in_STR=STR_Classifier.is_in_str(ref_pos_tracker),
                     )
             if op in REF_CONSUMING_OPS:
                 ref_pos_tracker += length
