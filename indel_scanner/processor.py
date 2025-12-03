@@ -95,9 +95,6 @@ class Processor:
                         context_string
                     )
 
-                    if self._should_filter_indel(prefix, indel_seq, suffix, 3):
-                        continue  # Skip this record if it is a homopolymer
-
                     indel_obj = None
                     if indel_type == INDEL_TYPE.INSERTION:
                         indel_obj = Insertion(
@@ -108,7 +105,7 @@ class Processor:
                             suffix_context=suffix,
                             read_name=read_name,
                             type=indel_type,
-                            inserted_seq=indel_seq,
+                            indel_content=indel_seq,
                             in_STR=in_STR,
                         )
                     elif indel_type == INDEL_TYPE.DELETION:
@@ -124,8 +121,10 @@ class Processor:
                             read_name=read_name,
                             in_STR=in_STR,
                             type=indel_type,
-                            reference_seq=ref_seq,
+                            indel_content=ref_seq,
                         )
+                    if indel_obj and indel_obj._should_filter_indel():
+                        continue  # Skip this record if it is a homopolymer
 
                     if indel_obj:
                         self.indels_by_contig[contig][read_name].append(indel_obj)
@@ -286,129 +285,6 @@ class Processor:
         except ValueError as e:
             logger.error(f"Failed to parse sequence context '{context_string}': {e}")
             return "", "", ""
-
-    @staticmethod
-    def _run_overlaps_interval(
-        seq: str,  # type: ignore
-        interval: tuple[int, int],  # (start, end) inclusive, 0‑based
-        min_len: int = 3,
-    ) -> bool:
-        """
-        Return True iff *seq* contains a stretch of the same base whose length is
-        at least ``min_len`` **and** that stretch overlaps the interval
-        ``(start, end)``.  The interval normally corresponds to the indel
-        positions inside the concatenated string.
-        """
-        if not seq:
-            return False
-
-        start, end = interval  # inclusive indices of the indel
-        cur_char = seq[0]
-        cur_start = 0
-        cur_len = 1
-
-        for i in range(1, len(seq)):
-            if seq[i] == cur_char:
-                cur_len += 1
-            else:
-                # finish the previous run
-                if cur_len >= min_len:
-                    run_start, run_end = cur_start, cur_start + cur_len - 1
-                    # does the run intersect the indel interval?
-                    if not (run_end < start or run_start > end):
-                        return True
-                # start a new run
-                cur_char = seq[i]
-                cur_start = i
-                cur_len = 1
-
-        # check the very last run
-        if cur_len >= min_len:
-            run_start, run_end = cur_start, cur_start + cur_len - 1
-            if not (run_end < start or run_start > end):
-                return True
-
-        return False
-
-    def _is_homopolymer(
-        self,
-        prefix: str,
-        indel_seq: str,
-        suffix: str,
-        min_len: int = 3,
-    ) -> bool:
-        """
-        Return True if a homopolymer of at least ``min_len`` bases exists **and**
-        the homopolymer contains at least one base from ``indel_seq``.
-
-        The three parts are concatenated only once, the indel’s position inside
-        that string is recorded, and the scan performed by ``_run_overlaps_interval``.
-        """
-
-        if not indel_seq:
-            return False
-
-        # Fast‑path: the indel itself is already a long enough run
-        if len(set(indel_seq)) == 1 and len(indel_seq) >= min_len:
-            logger.debug(
-                f"Filtering homopolymer (indel alone): {prefix}[{indel_seq}]{suffix}"
-            )
-            return True
-
-        # Build the full context and compute the indel interval (inclusive)
-        full_seq = f"{prefix}{indel_seq}{suffix}"
-        indel_start = len(prefix)  # first base of the indel
-        indel_end = indel_start + len(indel_seq) - 1  # last base of the indel
-
-        if self._run_overlaps_interval(full_seq, (indel_start, indel_end), min_len):
-            logger.debug(
-                f"Filtering homopolymer (spanning indel): {prefix}[{indel_seq}]{suffix}"
-            )
-            return True
-
-        return False
-
-    def _is_adjacent_to_homopolymer(
-        self, prefix: str, suffix: str, min_len: int = 3
-    ) -> bool:
-        if len(prefix) >= min_len:
-            end_of_prefix = prefix[-min_len:]
-            if len(set(end_of_prefix)) == 1:
-                logger.debug(
-                    f"Filtering adjacent homopolymer (prefix): {end_of_prefix}"
-                )
-                return True
-        if len(suffix) >= min_len:
-            start_of_suffix = suffix[:min_len]
-            if len(set(start_of_suffix)) == 1:
-                logger.debug(
-                    f"Filtering adjacent homopolymer (suffix): {start_of_suffix}"
-                )
-                return True
-        return False
-
-    def _should_filter_indel(
-        self,
-        prefix: str,
-        indel_seq: str,
-        suffix: str,
-        min_len: int = 3,
-    ) -> bool:
-        """
-        Return **True** if the indel must be removed because:
-        • it participates in a homopolymer run (overlap), **or**
-        • it sits directly next to a homopolymer of length ≥ min_len.
-
-        """
-        #  Overlap check
-        if self._is_homopolymer(prefix, indel_seq, suffix, min_len):
-            return True
-
-        #  Adjacent‑only check
-        if self._is_adjacent_to_homopolymer(prefix, suffix, min_len):
-            return True
-
-        return False
 
     def write_output(
         self,

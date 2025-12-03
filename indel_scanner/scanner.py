@@ -2,7 +2,7 @@
 import csv
 import os
 from pathlib import Path
-from typing import Generator, Iterable, List, Tuple, Union
+from typing import Generator, Iterable, Union
 import pysam
 import pyfastx
 import time
@@ -88,7 +88,7 @@ class ContigScanner:
         )
 
         STR_Classifier = STRClassifier(self.config, contig_name)
-        STR_Classifier.is_in_str(ref_pos_tracker)
+
         for op_int, length in read.cigartuples:
             op = as_cigar(op_int)
             logger.debug(
@@ -120,7 +120,7 @@ class ContigScanner:
                         ],
                         read_name=read.query_name,
                         in_STR=STR_Classifier.is_in_str(ref_pos_tracker),
-                        inserted_seq=read.query_sequence[
+                        indel_content=read.query_sequence[
                             read_pos_tracker : read_pos_tracker + length
                         ],
                     )
@@ -137,7 +137,7 @@ class ContigScanner:
                         prefix_context=contig_seq[
                             max(0, ref_pos_tracker - 5) : ref_pos_tracker
                         ],
-                        reference_seq=contig_seq[
+                        indel_content=contig_seq[
                             ref_pos_tracker : ref_pos_tracker + length
                         ],
                         suffix_context=contig_seq[

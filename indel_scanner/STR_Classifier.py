@@ -95,15 +95,9 @@ class STRClassifier:
         if not self.num_regions:
             return False
 
-        # Find the insertion point for 'position' in the sorted list of start coordinates.
-        # bisect_right finds an insertion point which comes after (to the right of)
-        # any existing entries of 'position'.
-        # This tells us the index of the first region that *might* start after our position.
+        
         idx = bisect.bisect_right(self.starts, position)
 
-        # The candidate region that could contain our position must be the one
-        # immediately to the left of our insertion point.
-        # So we check the region at index `idx - 1`.
 
         if idx == 0:
             # The position is before the start of all known regions.
@@ -111,8 +105,6 @@ class STRClassifier:
 
         candidate_index = idx - 1
 
-        # Now we only need to perform one check:
-        # Is the position within the bounds of this single candidate region?
         candidate_start = self.starts[candidate_index]
         candidate_end = self.ends[candidate_index]
 
