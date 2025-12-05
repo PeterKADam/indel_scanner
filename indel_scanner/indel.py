@@ -50,22 +50,22 @@ class Indel(ABC):
     in_STR: bool
     map_quality: Optional[int] = None
 
-    def tsv_sequence_field(self) -> str:
-        return self.indel_content
-
     def to_scanner_tsv_row(self) -> List[str]:
         return [
             self.contig,
             str(self.ref_position),
             self.type.value,
             str(self.length),
-            self.sequencecontext(),
+            self.sequencecontext_brackets(),
             self.read_name,
             str(self.in_STR),
         ]
 
+    def sequencecontext_brackets(self) -> str:
+        return f"{self.prefix_context}[{self.indel_content}]{self.suffix_context}"
+
     def sequencecontext(self) -> str:
-        return f"{self.prefix_context}[{self.tsv_sequence_field}]{self.suffix_context}"
+        return f"{self.prefix_context}{self.indel_content}{self.suffix_context}"
 
     @abstractmethod
     def to_processor_tsv_row(self) -> List[str]:
@@ -75,18 +75,18 @@ class Indel(ABC):
         # Fast‑path: the indel itself is already a long enough run
         if len(set(self.indel_content)) == 1 and len(self.indel_content) >= 3:
             logger.debug(
-                f"Filtering homopolymer (indel alone): {self.prefix_context}[{self.indel_content}]{self.suffix_context}"
+                f"Filtering homopolymer (indel alone): {self.sequencecontext_brackets()}"
             )
             return True
 
         # Build the full context and compute the indel interval (inclusive)
-        full_seq = f"{self.prefix_context}{self.indel_content}{self.indel_content}"
+        full_seq = self.sequencecontext()
         indel_start = len(self.prefix_context)  # first base of the indel
         indel_end = indel_start + len(self.indel_content) - 1  # last base of the indel
 
         if self.run_overlaps_interval(full_seq, (indel_start, indel_end)):
             logger.debug(
-                f"Filtering homopolymer (spanning indel): {self.prefix_context}[{self.indel_content}]{self.suffix_context}"
+                f"Filtering homopolymer (spanning indel): {self.sequencecontext_brackets()}"
             )
             return True
 
@@ -202,3 +202,4 @@ class Deletion(Indel):
             ]
         )
         return base_row
+
