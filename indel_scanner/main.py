@@ -33,7 +33,6 @@ def main():
 
     config = Config.load()
 
-    # --- Dispatch to the correct function based on the command ---
     if isinstance(config, ScannerConfig):
         run_scan(config)
         if config.args.process:
@@ -41,8 +40,9 @@ def main():
 
     elif isinstance(config, ProcessorConfig):
         process(config)
-
-    sys.exit(1)
+    else:
+        logger.error(f"Unknown config: {config}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
