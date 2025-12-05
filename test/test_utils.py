@@ -1,10 +1,6 @@
 import pytest
 from indel_scanner.utils import (as_cigar, Cigar)
 
-
-
-
-
 ### positive
 def test_as_cigar_with_valid_op():
     """
@@ -32,9 +28,6 @@ def test_as_cigar_with_valid_op():
 def test_as_cigar_with_multiple_valid_ops(op_int, expected_cigar):
     assert as_cigar(op_int) == expected_cigar
 
-
-
-
 ### negative
 def test_as_cigar_with_invalid_op():
     # Arrange
@@ -45,8 +38,6 @@ def test_as_cigar_with_invalid_op():
 
     # Assert
     assert result is None
-
-
 
 ###logging?
 def test_as_cigar_logs_error_on_invalid_op(caplog):

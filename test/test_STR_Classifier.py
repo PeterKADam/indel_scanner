@@ -23,7 +23,8 @@ class TestSTRClassifier:
         THEN it should correctly parse the file, skipping headers and filtering out homopolymers.
         """
         # Arrange: This data is synthetic but  mimics the real file format.
-        realistic_file_content = """**********************************TRs Found by RPTRF**********************************
+        realistic_file_content = """
+        **********************************TRs Found by RPTRF**********************************
 Start End Len Motif Size( Sequence )
 77 85 9 2(TA) TATATATAT
 98 115 18 6(ATTTAT) ATTTATATTTATATTTAT
