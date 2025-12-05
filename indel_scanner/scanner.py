@@ -8,8 +8,8 @@ import pyfastx
 import time
 import logging
 
-from indel_scanner.IO import _write_records_to_tsv, cleanup_temp_dir
-from indel_scanner.indel_scanner.STR_Classifier import STRClassifier
+from .IO import _write_records_to_tsv, cleanup_temp_dir
+from .STR_Classifier import STRClassifier
 from .indel import INDEL_TYPE, TSV_HEADERS, Insertion, Deletion
 from .utils import Cigar, as_cigar
 from .configurator import ScannerConfig
