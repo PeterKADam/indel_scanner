@@ -1,4 +1,3 @@
-# indel_scanner/scanner_class.py
 import csv
 import os
 from pathlib import Path
@@ -207,10 +206,11 @@ def aggregate_partial_results(temp_dir, final_output_path):
         # header
         writer.writerow(TSV_HEADERS.SCANNER.value)
 
+        temp_dir_list = os.listdir(temp_dir)
         logger.debug(
-            f"Writing ({len(os.listdir(temp_dir))}) partial results  to final output file..."
+            f"Writing ({len(temp_dir_list)}) partial results  to final output file..."
         )
-        for part_file in os.listdir(temp_dir):
+        for part_file in temp_dir_list:
             if part_file.endswith(".part.tsv"):
                 part_path = os.path.join(temp_dir, part_file)
                 with open(part_path, "r") as f_in:

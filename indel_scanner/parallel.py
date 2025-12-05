@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 def parallel_scan(scannerconfig):
     scanner = ContigScanner(scannerconfig)
 
+    parallel_n = scannerconfig.num_processes or cpu_count()
     logger.info(
-        f"Using {scannerconfig.num_processes or cpu_count()} parallel processes."
+        f"Using {parallel_n} parallel processes."
     )
 
     logger.info("Starting indel scanning process...")
@@ -45,7 +46,7 @@ def parallel_scan(scannerconfig):
         # Add a task to the progress display
         task_id = progress.add_task("[green]Scanning contigs...", total=len(contigs))
 
-        with Pool(processes=scannerconfig.num_processes or cpu_count()) as pool:
+        with Pool(processes=parallel_n) as pool:
             # Use imap_unordered to get results as soon as they are ready
             results_iterator = pool.imap_unordered(partialfunc, contigs)
 
