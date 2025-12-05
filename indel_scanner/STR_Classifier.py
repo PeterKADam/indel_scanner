@@ -2,7 +2,7 @@ import bisect
 from pathlib import Path
 from typing import List, Tuple
 
-from indel_scanner.indel_scanner.configurator import ScannerConfig
+from indel_scanner.configurator import ScannerConfig
 
 
 class STRClassifier:
@@ -28,8 +28,8 @@ class STRClassifier:
 
         if not repeat_regions:
             # Handle case with no repeat regions
-            self.starts = []
-            self.ends = []
+            self.starts = ()
+            self.ends = ()
         else:
             # Separate starts and ends for efficient lookup
             self.starts, self.ends = zip(*repeat_regions)
