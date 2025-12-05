@@ -13,7 +13,7 @@ from indel_scanner.IO import _write_records_to_tsv
 from .indel import INDEL_TYPE, TSV_HEADERS
 from .indel import Insertion, Deletion
 from .utils import Cigar
-from indel_scanner.configurator import ProcessorConfig
+from .configurator import ProcessorConfig
 
 logger = logging.getLogger(__name__)
 
