@@ -1,20 +1,19 @@
-import sys
 import logging
-import csv
+import sys
 from collections import defaultdict
+from typing import List, Tuple, Dict
 
+import polars as pl
 import pyfastx
 import pysam
 from pysam import AlignedSegment
-from typing import List, Tuple, Union, Dict
 
+from .IO import write_records_with_polars
 from homopolymer_classifier import HomopolymerClassifier
-from indel_scanner.IO import _write_records_to_tsv
-
-from .indel import INDEL_TYPE, TSV_HEADERS
+from .configurator import ProcessorConfig
+from .indel import INDEL_TYPE, Indel
 from .indel import Insertion, Deletion
 from .utils import Cigar
-from .configurator import ProcessorConfig
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class Processor:
 
         # Structure: {contig: {read_name: [list_of_indel_objects]}}
         self.indels_by_contig: Dict[
-            str, Dict[str, List[Union[Insertion, Deletion]]]
+            str, Dict[str, List[Indel]]
         ] = defaultdict(lambda: defaultdict(list))
 
         self.insertion_output: List[Insertion] = []
@@ -74,75 +73,71 @@ class Processor:
         logger.info(f"Loading and filtering indels from {self.config.input_file}...")
 
         try:
-            with open(self.config.input_file, "r", newline="") as infile:
-                reader = csv.DictReader(infile, delimiter="\t")
-                for i, row in enumerate(reader):
-                    try:
-                        contig = row["Contig"]
-                        position = int(row["Position"])
-                        length = int(row["Length"])
-                        indel_type = INDEL_TYPE(row["Type"])
-                        context_string = row["Sequence"]
-                        read_name = row["Read_Name"]
-                        in_STR = row["In_STR"].strip().lower() == "true"
 
-                    except (ValueError, KeyError, TypeError) as e:
-                        logger.warning(
-                            f"Skipping row #{i + 2} due to malformed data: {row} | Error: {e}"
-                        )
-                        continue
+            lazy_df = pl.scan_csv(self.config.input_file,separator="\t",has_header=True)
+            df = lazy_df.collect()
 
-                    prefix, indel_seq, suffix = self._parse_sequence_context(
-                        context_string
+            for row in df.iter_rows(named=True):
+                contig = row["contig"]
+                position = row["ref_position"]
+                length = row["length"]
+                indel_type = row["type"]
+
+                prefix,indel_seq,suffix = self._parse_sequence_context(row["[sequence]_context"])
+
+                read_name = row["read_name"]
+                in_STR = row["in_STR"]
+
+                indel_obj = None
+                if indel_type == INDEL_TYPE.INSERTION:
+                    indel_obj = Indel.create(
+                        contig=contig,
+                        ref_position=position,
+                        length=length,
+                        prefix_context=prefix,
+                        suffix_context=suffix,
+                        read_name=read_name,
+                        type=indel_type,
+                        indel_content=indel_seq,
+                        in_STR=in_STR,
                     )
-
-                    indel_obj = None
-                    if indel_type == INDEL_TYPE.INSERTION:
-                        indel_obj = Insertion(
-                            contig=contig,
-                            ref_position=position,
-                            length=length,
-                            prefix_context=prefix,
-                            suffix_context=suffix,
-                            read_name=read_name,
-                            type=indel_type,
-                            indel_content=indel_seq,
-                            in_STR=in_STR,
-                        )
-                    elif indel_type == INDEL_TYPE.DELETION:
-                        ref_seq = self.reference.fetch(  # type: ignore
-                            contig, (position, position + length - 1)
-                        )  # type: ignore
-                        indel_obj = Deletion(
-                            contig=contig,
-                            ref_position=position,
-                            length=length,
-                            prefix_context=prefix,
-                            suffix_context=suffix,
-                            read_name=read_name,
-                            in_STR=in_STR,
-                            type=indel_type,
-                            indel_content=ref_seq,
-                        )
-                    if indel_obj and HomopolymerClassifier(indel_obj).should_filter_indel():
+                elif indel_type == INDEL_TYPE.DELETION:
+                    ref_seq = self.reference.fetch(  # type: ignore
+                        contig, (position, position + length - 1)
+                    )  # type: ignore
+                    indel_obj = Indel.create(
+                        contig=contig,
+                        ref_position=position,
+                        length=length,
+                        prefix_context=prefix,
+                        suffix_context=suffix,
+                        read_name=read_name,
+                        in_STR=in_STR,
+                        type=indel_type,
+                        indel_content=ref_seq,
+                    )
+                if indel_obj and HomopolymerClassifier(indel_obj).should_filter_indel():
                         continue  # Skip this record if it is a homopolymer
 
-                    if indel_obj:
-                        self.indels_by_contig[contig][read_name].append(indel_obj)
-                        logger.info(f"added indel {contig}:{position}:{indel_type}")
+                if indel_obj:
+                    self.indels_by_contig[contig][read_name].append(indel_obj)
+                    logger.info(f"added indel {contig}:{position}:{indel_type}")
 
-        except FileNotFoundError:
-            logger.error(f"Input file not found: {self.config.input_file}")
+
+        except pl.exceptions.NoDataError:
+
+            logger.warning(f"Input file is empty: {self.config.input_file}")
+
+            return
+
+        except Exception as e:
+
+            logger.error(f"Failed to load indels with Polars: {e}")
+
             raise
 
-        num_indels = sum(
-            len(indels)
-            for reads in self.indels_by_contig.values()
-            for indels in reads.values()
-        )
-        logger.info(
-            f"Loaded {num_indels} indels across {len(self.indels_by_contig)} contigs."
-        )
+        num_indels = sum(len(indels) for reads in self.indels_by_contig.values() for indels in reads.values())
+        logger.info(f"Loaded {num_indels} indels across {len(self.indels_by_contig)} contigs.")
 
     def _process_bam_file(self):
         if not self.bam_handle:
@@ -287,33 +282,19 @@ class Processor:
             logger.error(f"Failed to parse sequence context '{context_string}': {e}")
             return "", "", ""
 
-    def write_output(
-        self,
-    ):
-        insertions_path = self.config.insertions_path
-        deletions_path = self.config.deletions_path
+    # Inside your Processor class:
+    def write_output(self):
+        if self.config.insertions_path and self.insertion_output:
+            logger.info(
+                f"Writing {len(self.insertion_output)} insertions to {self.config.insertions_path} using Polars...")
+            write_records_with_polars(self.insertion_output, self.config.insertions_path)
 
-        if not any([insertions_path, deletions_path]):
-            logger.warning("write_output called, but no output paths were provided.")
-            return
+        if self.config.deletions_path and self.deletion_output:
+            logger.info(
+                f"Writing {len(self.deletion_output)} deletions to {self.config.deletions_path} using Polars...")
+            write_records_with_polars(self.deletion_output, self.config.deletions_path)
 
-        if insertions_path and self.insertion_output:
-            _write_records_to_tsv(
-                output_path=insertions_path,
-                records=self.insertion_output,
-                row_converter=lambda r: r.to_processor_tsv_row(),
-                header=TSV_HEADERS["PROCESSOR"].value,
-                sort_key=lambda r: (r.contig, r.ref_position),
-            )
 
-        if deletions_path and self.deletion_output:
-            _write_records_to_tsv(
-                output_path=deletions_path,
-                records=self.deletion_output,
-                row_converter=lambda r: r.to_processor_tsv_row(),
-                header=TSV_HEADERS["PROCESSOR"].value,
-                sort_key=lambda r: (r.contig, r.ref_position),
-            )
 
 
 def run_processor(config):

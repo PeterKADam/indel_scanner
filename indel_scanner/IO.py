@@ -3,13 +3,46 @@ import logging
 from pathlib import Path
 import shutil
 from typing import Iterable, Callable, List, Any, Optional, Union, Generator
-
+import polars as pl
 from .indel import Insertion, Deletion, Indel
 
 logger = logging.getLogger(__name__)
 
 
-def _write_records_to_tsv(
+def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: Path):
+    """Converts records to a DataFrame and writes to a TSV file."""
+    if not records:
+        return
+
+    # 1. Convert list of objects to a list of dictionaries (the bridge to Polars)
+    data = [r.to_processor_dict() for r in records]  # We'll need to add this method
+
+    # 2. Create the DataFrame
+    df = pl.DataFrame(data)
+
+    # 3. Perform final transformations and select columns
+    # Helper expression to format list columns
+    def format_list_col(col_name: str) -> pl.Expr:
+        return pl.col(col_name).list.join(",").fill_null("NA")
+
+    final_df = df.select(
+        pl.col("contig"),
+        pl.col("ref_position"),
+        pl.col("type"),
+        pl.col("length"),
+        pl.col("sequence_context_brackets").alias("[sequence]_context"),
+        pl.col("read_name"),
+        pl.col("in_STR"),
+        format_list_col("prefix_quality"),
+        format_list_col("insertion_quality"),  # Will be null for deletions, handled by fill_null
+        format_list_col("suffix_quality"),
+        pl.col("map_quality"),
+    )
+
+    # Sort and write
+    final_df.sort(["contig", "ref_position"]).write_csv(path, separator="\t")
+
+def write_records_to_tsv(
     output_path: Path,
     records: Generator[Indel, None, None],
     row_converter: Callable[[Union[Insertion, Deletion]], List[Any]],
