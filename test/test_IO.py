@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import Mock, mock_open
 from pathlib import Path
-# Updated to import from your specified module path.
+
 from indel_scanner.IO import _write_records_to_tsv, cleanup_temp_dir
 
 @pytest.fixture

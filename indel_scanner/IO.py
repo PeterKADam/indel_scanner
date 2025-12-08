@@ -2,16 +2,16 @@ import csv
 import logging
 from pathlib import Path
 import shutil
-from typing import Iterable, Callable, List, Any, Optional, Union
+from typing import Iterable, Callable, List, Any, Optional, Union, Generator
 
-from .indel import Insertion, Deletion
+from .indel import Insertion, Deletion, Indel
 
 logger = logging.getLogger(__name__)
 
 
 def _write_records_to_tsv(
     output_path: Path,
-    records: Iterable[Union[Insertion, Deletion]],
+    records: Generator[Indel, None, None],
     row_converter: Callable[[Union[Insertion, Deletion]], List[Any]],
     header: Optional[List[str]] = None,
     buffer_size: int = 10000,
@@ -35,7 +35,7 @@ def _write_records_to_tsv(
     if sort_key:
         # Sorting requires consuming the entire iterable into a list.
         logger.debug(f"Sorting records for {output_path.name}...")
-        records_to_write = sorted(list(records), key=sort_key)
+        records_to_write = sorted(records, key=sort_key)
     else:
         records_to_write = records
 

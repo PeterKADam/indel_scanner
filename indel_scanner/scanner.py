@@ -1,15 +1,16 @@
 import csv
 import os
 from pathlib import Path
-from typing import Generator, Iterable, Union
+from typing import Generator, Iterable, Union, Optional
 import pysam
 import pyfastx
 import time
 import logging
 
+from indel import Indel
 from .IO import _write_records_to_tsv, cleanup_temp_dir
 from .STR_Classifier import STRClassifier
-from .indel import INDEL_TYPE, TSV_HEADERS, Insertion, Deletion
+from .indel import INDEL_TYPE, TSV_HEADERS, Insertion, Deletion, Indel
 from .utils import Cigar, as_cigar
 from .configurator import ScannerConfig
 
@@ -45,7 +46,7 @@ class ContigScanner:
         """
         self.config = config
 
-    def scan_contig(self, contig_name: str) -> tuple[Path, str] | None:
+    def scan_contig(self, contig_name: str) -> Optional[tuple[Path, str]]:
         try:
             with pysam.AlignmentFile(str(self.config.bamfile), "rb") as samfile:
                 temp_output_path = self.config.temp_dir / f"{contig_name}.part.tsv"
@@ -68,7 +69,7 @@ class ContigScanner:
 
     def _parse_cigar(
         self, read: pysam.AlignedSegment, fasta: pyfastx.Fasta, contig_name: str
-    ) -> Generator[Insertion | Deletion]:
+    ) -> Generator[Indel, None, None]:
         ref_pos_tracker = read.reference_start
         read_pos_tracker = 0
 
@@ -106,7 +107,7 @@ class ContigScanner:
                         f"insertion passed min size {self.config.min_indel_size}"
                     )
 
-                    yield Insertion(
+                    yield Indel.create(
                         contig=read.reference_name,
                         ref_position=ref_pos_tracker,
                         type=INDEL_TYPE.INSERTION,
@@ -128,7 +129,7 @@ class ContigScanner:
                 if length >= self.config.min_indel_size:
                     contig_seq = fasta[contig_name].seq
 
-                    yield Deletion(
+                    yield Indel.create(
                         contig=read.reference_name,
                         ref_position=ref_pos_tracker,
                         type=INDEL_TYPE.DELETION,
@@ -152,7 +153,7 @@ class ContigScanner:
 
     def _generate_indels_from_contig(
         self, samfile: pysam.AlignmentFile, fasta: pyfastx.Fasta, contig_name: str
-    ) -> Iterable[Union[Insertion, Deletion]]:
+    ) -> Generator[Indel, None, None]:
         for read in samfile.fetch(contig=contig_name):
             if (
                 read.is_unmapped

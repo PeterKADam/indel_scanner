@@ -7,6 +7,7 @@ from indel_scanner.indel import (
     Deletion,
     INDEL_TYPE,
 )
+from homopolymer_classifier import HomopolymerClassifier
 
 
 @pytest.mark.parametrize("scores, expected", [
@@ -44,7 +45,7 @@ def test_format_quality_scores(scores, expected):
 
 def test_run_overlaps_interval(seq, interval, min_len, expected):
     """Tests the static method Indel.run_overlaps_interval with various scenarios."""
-    assert Indel.run_overlaps_interval(seq, interval, min_len) == expected
+    assert HomopolymerClassifier.run_overlaps_interval(seq, interval, min_len) == expected
 
 
 # ==============================================================================
@@ -179,4 +180,4 @@ def test_should_filter_indel(prefix, indel, suffix, expected_filter):
         prefix_context=prefix, indel_content=indel, suffix_context=suffix,
         read_name="r1", type=INDEL_TYPE.INSERTION, in_STR=False
     )
-    assert test_indel._should_filter_indel() == expected_filter
+    assert HomopolymerClassifier(test_indel).should_filter_indel() == expected_filter

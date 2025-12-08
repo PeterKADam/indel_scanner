@@ -8,6 +8,7 @@ import pysam
 from pysam import AlignedSegment
 from typing import List, Tuple, Union, Dict
 
+from homopolymer_classifier import HomopolymerClassifier
 from indel_scanner.IO import _write_records_to_tsv
 
 from .indel import INDEL_TYPE, TSV_HEADERS
@@ -123,7 +124,7 @@ class Processor:
                             type=indel_type,
                             indel_content=ref_seq,
                         )
-                    if indel_obj and indel_obj._should_filter_indel():
+                    if indel_obj and HomopolymerClassifier(indel_obj).should_filter_indel():
                         continue  # Skip this record if it is a homopolymer
 
                     if indel_obj:
