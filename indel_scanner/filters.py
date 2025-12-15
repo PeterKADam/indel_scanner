@@ -1,6 +1,7 @@
 import logging
 from functools import partial
 from typing import List, Dict, Callable, Any, DefaultDict
+
 # Assuming these are defined elsewhere
 from .homopolymer_classifier import HomopolymerClassifier
 from .indel import Indel
@@ -8,10 +9,7 @@ from .indel import Indel
 logger = logging.getLogger(__name__)
 
 
-class IndelFilters():
-
-
-
+class IndelFilters:
     @staticmethod
     def _is_in_str(indel: Indel, **kwargs) -> None:
         if indel.in_STR:
@@ -32,9 +30,10 @@ class IndelFilters():
         if indel.map_quality <= min_mapq:
             indel.filter_reason.append(f"poor_mapping_quality_<{min_mapq}")
 
-
     @staticmethod
-    def _similar_indels_in_other_reads(indel: Indel, location_map: DefaultDict, **kwargs) -> None:
+    def _similar_indels_in_other_reads(
+        indel: Indel, location_map: DefaultDict, **kwargs
+    ) -> None:
         """Tags indels that have identical counterparts in other reads."""
         key = (indel.ref_position, indel.type, indel.length)
 
@@ -42,7 +41,9 @@ class IndelFilters():
             indel.filter_reason.append("similar_indels_in_other_reads")
 
     @staticmethod
-    def apply(active_filters: List[Dict[str, Any]], indel: Indel, **context: Any) -> None:
+    def apply(
+        active_filters: List[Dict[str, Any]], indel: Indel, **context: Any
+    ) -> None:
         for config in active_filters:
             filter_name = config.get("name")
             params = config.get("params", {})
@@ -51,14 +52,17 @@ class IndelFilters():
                 try:
                     filter_func(indel, **params, **context)
                 except TypeError as e:
-                    logger.error(f"Error calling filter '{filter_name}'. Check parameters. Error: {e}")
+                    logger.error(
+                        f"Error calling filter '{filter_name}'. Check parameters. Error: {e}"
+                    )
             else:
                 logger.warning(f"Filter '{filter_name}' not found. Skipping.")
 
+
 IndelFilters_all_filters: Dict[str, Callable] = {
-        "is_in_str": IndelFilters._is_in_str,
-        "is_adjacent_to_homopolymer": IndelFilters._is_adjacent_to_homopolymer,
-        "is_homopolymer": IndelFilters._is_homopolymer,
-        "poor_mapping_quality": IndelFilters._poor_mapping_quality,
-        "similar_indels_in_other_reads": IndelFilters._similar_indels_in_other_reads,
-    }
+    "is_in_str": IndelFilters._is_in_str,
+    "is_adjacent_to_homopolymer": IndelFilters._is_adjacent_to_homopolymer,
+    "is_homopolymer": IndelFilters._is_homopolymer,
+    "poor_mapping_quality": IndelFilters._poor_mapping_quality,
+    "similar_indels_in_other_reads": IndelFilters._similar_indels_in_other_reads,
+}
