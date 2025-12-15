@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from typing import List, Optional, Dict, Any
 
@@ -16,19 +16,17 @@ class INDEL_TYPE(StrEnum):
 class TSV_HEADERS(Enum):
     SCANNER = [
         "contig", "ref_position", "type", "length",
-        "[sequence]_context", "read_name", "in_STR",
+        "[sequence]_context", "read_name", "in_STR","filter_reason","map_quality"
     ]
     PROCESSOR = SCANNER + [
-        "prefix_quality", "insertion_quality", "suffix_quality", "map_quality",
+        "prefix_quality", "insertion_quality", "suffix_quality",
     ]
 
-# --- Pure Data Classes for Indels ---
 
 @dataclass
 class Indel(ABC):
     """
-    An abstract base class representing a generic Insertion or Deletion.
-    This class is a pure data container. All formatting logic is externalized.
+    An abstract factory class representing a generic Insertion or Deletion.
     """
     # Core attributes
     contig: str
@@ -38,11 +36,12 @@ class Indel(ABC):
     indel_content: str
     suffix_context: str
     read_name: str
-    type: INDEL_TYPE
     in_STR: bool
 
     # Attributes populated from BAM file
+    type: INDEL_TYPE
     map_quality: Optional[int] = None
+    filter_reason: List[str] = field(default_factory=list)
 
     @classmethod
     def create(
@@ -138,21 +137,20 @@ class Deletion(Indel):
             "map_quality": self.map_quality,
         }
 
-# --- Externalized Formatter Class ---
 
 class IndelTsvFormatter:
     """
     Handles formatting of Indel objects into string-based TSV rows.
-    Note: This class is useful for legacy code or debugging that needs to
-    generate single rows, but the high-performance path uses the
-    `.to_processor_dict()` method for bulk Polars conversion.
+    As a utility class with stateless methods, all functions are static.
     """
+
     @staticmethod
     def _format_quality_scores(scores: Optional[List[int]]) -> str:
         """Converts a list of integers into a comma-separated string."""
         return ",".join(map(str, scores)) if scores is not None else "NA"
 
-    def format_scanner_row(self, indel: Indel) -> List[str]:
+    @staticmethod
+    def format_scanner_row(indel: Indel) -> List[str]:
         """Generates a TSV row for the 'scanner' output format."""
         return [
             indel.contig,
@@ -162,29 +160,36 @@ class IndelTsvFormatter:
             indel.sequencecontext_brackets(),
             indel.read_name,
             str(indel.in_STR),
+            ", ".join(indel.filter_reason) # Assuming filter_reason should be a string
         ]
 
-    def format_processor_row(self, indel: Indel) -> List[str]:
+    @staticmethod
+    def format_processor_row(indel: Indel) -> List[str]:
         """
-        Generates a TSV row for the 'processor' output format,
-        handling both Insertion and Deletion types.
+        Generates a TSV row for the 'processor' output format, handling both
+        Insertion and Deletion types.
         """
-        base_row = self.format_scanner_row(indel)
+        # Call the other static methods using the class name
+        base_row = IndelTsvFormatter.format_scanner_row(indel)
+
         if isinstance(indel, Insertion):
             base_row.extend([
-                self._format_quality_scores(indel.prefix_quality),
-                self._format_quality_scores(indel.insertion_quality),
-                self._format_quality_scores(indel.suffix_quality),
+                IndelTsvFormatter._format_quality_scores(indel.prefix_quality),
+                IndelTsvFormatter._format_quality_scores(indel.insertion_quality),
+                IndelTsvFormatter._format_quality_scores(indel.suffix_quality),
                 str(indel.map_quality),
             ])
         elif isinstance(indel, Deletion):
             base_row.extend([
-                self._format_quality_scores(indel.prefix_quality),
+                IndelTsvFormatter._format_quality_scores(indel.prefix_quality),
                 "NA",  # Placeholder for insertion_quality
-                self._format_quality_scores(indel.suffix_quality),
+                IndelTsvFormatter._format_quality_scores(indel.suffix_quality),
                 str(indel.map_quality),
             ])
         else:
             raise TypeError(f"Unsupported Indel type for formatting: {type(indel)}")
+
         return base_row
+
+
 

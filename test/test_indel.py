@@ -1,13 +1,12 @@
 import pytest
 
+from indel_scanner.homopolymer_classifier import (HomopolymerClassifier)
 from indel_scanner.indel import (
-    _format_quality_scores,
-    Indel,
+    IndelTsvFormatter,
     Insertion,
     Deletion,
     INDEL_TYPE,
 )
-from homopolymer_classifier import HomopolymerClassifier
 
 
 @pytest.mark.parametrize("scores, expected", [
@@ -17,7 +16,7 @@ from homopolymer_classifier import HomopolymerClassifier
 ])
 def test_format_quality_scores(scores, expected):
     """Tests the _format_quality_scores helper function with various inputs."""
-    assert _format_quality_scores(scores) == expected
+    assert IndelTsvFormatter._format_quality_scores(scores) == expected
 
 
 @pytest.mark.parametrize("seq, interval, min_len, expected", [
@@ -65,6 +64,7 @@ def insertion_instance() -> Insertion:
         read_name="read_1",
         type=INDEL_TYPE.INSERTION,
         in_STR=False,
+        filter_reason=[],
         map_quality=60,
         insertion_quality=[30, 31, 32],
         prefix_quality=[25, 26, 27, 28],
@@ -85,6 +85,7 @@ def deletion_instance() -> Deletion:
         read_name="read_2",
         type=INDEL_TYPE.DELETION,
         in_STR=True,
+        filter_reason=[],
         map_quality=50,
         prefix_quality=[20, 21, 22],
         suffix_quality=[28, 29, 30],
@@ -106,7 +107,7 @@ def test_sequence_context(insertion_instance):
 def test_to_scanner_tsv_row(insertion_instance, deletion_instance):
     """Tests the to_scanner_tsv_row method for both Indel types."""
     # Test Insertion
-    ins_row = insertion_instance.to_scanner_tsv_row()
+    ins_row = IndelTsvFormatter.format_scanner_row(insertion_instance)
     expected_ins = [
         "chr1",
         "100",
@@ -115,11 +116,12 @@ def test_to_scanner_tsv_row(insertion_instance, deletion_instance):
         "GATT[ACA]TACC",
         "read_1",
         "False",
+        ""
     ]
     assert ins_row == expected_ins
 
     # Test Deletion
-    del_row = deletion_instance.to_scanner_tsv_row()
+    del_row = IndelTsvFormatter.format_scanner_row(deletion_instance)
     expected_del = [
         "chr2",
         "200",
@@ -128,15 +130,16 @@ def test_to_scanner_tsv_row(insertion_instance, deletion_instance):
         "AAT[GG]CCA",
         "read_2",
         "True",
+        ""
     ]
     assert del_row == expected_del
 
 
 def test_insertion_to_processor_tsv_row(insertion_instance):
     """Tests the processor-specific TSV row for an Insertion."""
-    proc_row = insertion_instance.to_processor_tsv_row()
+    proc_row = IndelTsvFormatter.format_processor_row(insertion_instance)
     expected_proc = [
-        "chr1", "100", "ins", "3", "GATT[ACA]TACC", "read_1", "False",  # Scanner part
+        "chr1", "100", "ins", "3", "GATT[ACA]TACC", "read_1", "False","",  # Scanner part
         "25,26,27,28", "30,31,32", "35,36,37,38", "60"  # Processor part
     ]
     assert proc_row == expected_proc
@@ -144,9 +147,9 @@ def test_insertion_to_processor_tsv_row(insertion_instance):
 
 def test_deletion_to_processor_tsv_row(deletion_instance):
     """Tests the processor-specific TSV row for a Deletion."""
-    proc_row = deletion_instance.to_processor_tsv_row()
+    proc_row = IndelTsvFormatter.format_processor_row(deletion_instance)
     expected_proc = [
-        "chr2", "200", "del", "2", "AAT[GG]CCA", "read_2", "True",  # Scanner part
+        "chr2", "200", "del", "2", "AAT[GG]CCA", "read_2", "True","",  # Scanner part
         "20,21,22", "NA", "28,29,30", "50"  # Processor part
     ]
     assert proc_row == expected_proc
@@ -178,6 +181,6 @@ def test_should_filter_indel(prefix, indel, suffix, expected_filter):
     test_indel = Insertion(
         contig="chr1", ref_position=1, length=len(indel),
         prefix_context=prefix, indel_content=indel, suffix_context=suffix,
-        read_name="r1", type=INDEL_TYPE.INSERTION, in_STR=False
+        read_name="r1", type=INDEL_TYPE.INSERTION, in_STR=False,filter_reason=[],map_quality=50,
     )
     assert HomopolymerClassifier(test_indel).should_filter_indel() == expected_filter

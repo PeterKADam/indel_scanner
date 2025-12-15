@@ -14,14 +14,9 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
     if not records:
         return
 
-    # 1. Convert list of objects to a list of dictionaries (the bridge to Polars)
     data = [r.to_processor_dict() for r in records]  # We'll need to add this method
-
-    # 2. Create the DataFrame
     df = pl.DataFrame(data)
 
-    # 3. Perform final transformations and select columns
-    # Helper expression to format list columns
     def format_list_col(col_name: str) -> pl.Expr:
         return pl.col(col_name).list.join(",").fill_null("NA")
 
@@ -39,7 +34,6 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
         pl.col("map_quality"),
     )
 
-    # Sort and write
     final_df.sort(["contig", "ref_position"]).write_csv(path, separator="\t")
 
 def write_records_to_tsv(

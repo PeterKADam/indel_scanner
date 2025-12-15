@@ -6,11 +6,12 @@ from typing import List, Tuple, Dict
 import polars as pl
 import pyfastx
 import pysam
+from jedi.plugins.django import mapping
 from pysam import AlignedSegment
 
 from .IO import write_records_with_polars
-from homopolymer_classifier import HomopolymerClassifier
 from .configurator import ProcessorConfig
+from .filters import IndelFilters
 from .indel import INDEL_TYPE, Indel
 from .indel import Insertion, Deletion
 from .utils import Cigar
@@ -32,7 +33,6 @@ READ_CONSUMING_OPS = {
     Cigar.OP_EQ,
     Cigar.OP_X,
 }
-
 
 class Processor:
     def __init__(self, config: ProcessorConfig):
@@ -69,7 +69,7 @@ class Processor:
             self.bam_handle.close()
             logger.debug(f"Closed BAM file handle for {self.config.bamfile}")
 
-    def _load_and_filter_indels(self):
+    def _load_indels(self):
         logger.info(f"Loading and filtering indels from {self.config.input_file}...")
 
         try:
@@ -82,42 +82,31 @@ class Processor:
                 position = row["ref_position"]
                 length = row["length"]
                 indel_type = row["type"]
+                read_name = row["read_name"]
+                map_quality = row["map_quality"]
 
                 prefix,indel_seq,suffix = self._parse_sequence_context(row["[sequence]_context"])
 
-                read_name = row["read_name"]
-                in_STR = row["in_STR"]
-
-                indel_obj = None
-                if indel_type == INDEL_TYPE.INSERTION:
-                    indel_obj = Indel.create(
-                        contig=contig,
-                        ref_position=position,
-                        length=length,
-                        prefix_context=prefix,
-                        suffix_context=suffix,
-                        read_name=read_name,
-                        type=indel_type,
-                        indel_content=indel_seq,
-                        in_STR=in_STR,
-                    )
-                elif indel_type == INDEL_TYPE.DELETION:
-                    ref_seq = self.reference.fetch(  # type: ignore
-                        contig, (position, position + length - 1)
-                    )  # type: ignore
-                    indel_obj = Indel.create(
-                        contig=contig,
-                        ref_position=position,
-                        length=length,
-                        prefix_context=prefix,
-                        suffix_context=suffix,
-                        read_name=read_name,
-                        in_STR=in_STR,
-                        type=indel_type,
-                        indel_content=ref_seq,
-                    )
-                if indel_obj and HomopolymerClassifier(indel_obj).should_filter_indel():
-                        continue  # Skip this record if it is a homopolymer
+                indel_obj = Indel.create(
+                    contig=contig,
+                    ref_position=position,
+                    length=length,
+                    prefix_context=prefix,
+                    suffix_context=suffix,
+                    read_name=read_name,
+                    type=indel_type,
+                    indel_content=(
+                        indel_seq if indel_type == INDEL_TYPE.INSERTION
+                        else self.reference.fetch(
+                        contig,
+                        (position, position + length - 1)
+                        if indel_type == INDEL_TYPE.DELETION
+                        else None
+                        )
+                    ),
+                    in_STR=row["in_STR"],
+                    map_quality=map_quality,
+                )
 
                 if indel_obj:
                     self.indels_by_contig[contig][read_name].append(indel_obj)
@@ -141,41 +130,77 @@ class Processor:
 
     def _process_bam_file(self):
         if not self.bam_handle:
-            raise IOError("BAM file handle is not open. Cannot process.")
+            raise IOError("BAM file handle is not open.")
 
-        logger.info("Streaming BAM file and processing reads...")
+        logger.info("Streaming BAM file and processing reads contig-by-contig...")
+
+        filter_configuration = [
+            {'name': 'is_in_str'},
+            {'name': 'is_homopolymer'},
+            {'name': 'is_adjacent_to_homopolymer'},
+            {'name': 'poor_mapping_quality', 'params': {'min_mapq': self.config.get('min_mapq', 30)}},
+            {'name': 'similar_indels_in_other_reads'}
+        ]
 
         for contig, indels_on_this_contig in self.indels_by_contig.items():
             logger.info(f"Processing contig: {contig}...")
 
+            # ========================================================================
+            # Populate a TEMPORARY list of indels for only this contig.
+            # ========================================================================
+            indels_for_this_contig = []
             for bam_read in self.bam_handle.fetch(contig):
                 if bam_read.is_secondary or bam_read.is_supplementary:
                     continue
 
                 if bam_read.query_name in indels_on_this_contig:
-                    target_indels = indels_on_this_contig[bam_read.query_name]
-                    for indel_obj in target_indels:
-                        indel_obj.map_quality = bam_read.mapping_quality
+                    for indel_obj in indels_on_this_contig[bam_read.query_name]:
+                        #indel_obj.map_quality = bam_read.mapping_quality
                         if indel_obj.type == INDEL_TYPE.INSERTION:
-                            self._populate_insertion_quality(bam_read, indel_obj)  # type: ignore
-                            self.insertion_output.append(indel_obj)  # type: ignore
+                            self._populate_insertion_quality(bam_read, indel_obj)
                         elif indel_obj.type == INDEL_TYPE.DELETION:
-                            self._populate_deletion_flanking_quality(
-                                bam_read,
-                                indel_obj,  # type: ignore
-                            )  # type: ignore
-                            self.deletion_output.append(indel_obj)  # type: ignore
+                            self._populate_deletion_flanking_quality(bam_read, indel_obj)
 
-                        self.total_records_processed += 1
+                        indels_for_this_contig.append(indel_obj)
 
-        logger.info(f"Processed {self.total_records_processed} total records.")
+            if not indels_for_this_contig:
+                logger.info(f"No indels found on contig {contig}. Skipping.")
+                continue
+
+            # ========================================================================
+            # Build location map for this contig's indels.
+            # ========================================================================
+            indel_location_counts = defaultdict(int)
+            for indel in indels_for_this_contig:
+                key = (indel.ref_position, indel.type, indel.length)  # Contig is constant here
+                indel_location_counts[key] += 1
+
+            filter_context = {
+                "location_map": indel_location_counts
+            }
+
+            # ========================================================================
+            # Apply filters
+            # ========================================================================
+            for indel_obj in indels_for_this_contig:
+                # Pass the contig-specific context to the filter function
+                IndelFilters.apply(filter_configuration, indel_obj, **filter_context)
+
+                # Append to the final, class-level output lists
+                if indel_obj.type == INDEL_TYPE.INSERTION:
+                    self.insertion_output.append(indel_obj)
+                elif indel_obj.type == INDEL_TYPE.DELETION:
+                    self.deletion_output.append(indel_obj)
+
+        self.total_records_processed = len(self.insertion_output) + len(self.deletion_output)
+        logger.info(f"Finished processing. Total records: {self.total_records_processed}.")
 
     def process(self):
         if not self.bam_handle or not self.reference:
             logger.error("Cannot run processing: BAM or FASTA file not accessible.")
             sys.exit(1)
 
-        self._load_and_filter_indels()
+        self._load_indels()
 
         self._process_bam_file()
 
@@ -282,7 +307,6 @@ class Processor:
             logger.error(f"Failed to parse sequence context '{context_string}': {e}")
             return "", "", ""
 
-    # Inside your Processor class:
     def write_output(self):
         if self.config.insertions_path and self.insertion_output:
             logger.info(

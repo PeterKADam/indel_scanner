@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import Mock, mock_open
 from pathlib import Path
 
-from indel_scanner.IO import _write_records_to_tsv, cleanup_temp_dir
+from indel_scanner.IO import write_records_to_tsv, cleanup_temp_dir
 
 @pytest.fixture
 def mock_records():
@@ -48,7 +48,7 @@ class TestIOWriter:
         header = ["Contig", "Position"]
 
         # Act
-        count = _write_records_to_tsv(
+        count = write_records_to_tsv(
             output_path=output_path,
             records=mock_records,
             row_converter=mock_row_converter,
@@ -92,7 +92,7 @@ class TestIOWriter:
         sort_func = lambda r: r.pos
 
         # Act
-        count = _write_records_to_tsv(
+        count = write_records_to_tsv(
             output_path=output_path,
             records=mock_records,
             row_converter=mock_row_converter,
@@ -130,7 +130,7 @@ class TestIOWriter:
         header = ["Contig", "Position"]
 
         # Act
-        count = _write_records_to_tsv(
+        count = write_records_to_tsv(
             output_path=output_path,
             records=[],  # Empty list
             row_converter=mock_row_converter,
@@ -159,7 +159,7 @@ class TestIOWriter:
         output_path = Path("/restricted/output.tsv")
 
         # Act
-        count = _write_records_to_tsv(
+        count = write_records_to_tsv(
             output_path=output_path,
             records=mock_records,
             row_converter=mock_row_converter

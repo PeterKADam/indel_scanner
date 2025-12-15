@@ -9,7 +9,7 @@ class HomopolymerClassifier():
     def __init__(self, indel_obj: Indel):
         self.indel_obj = indel_obj
 
-    def _is_homopolymer(self) -> bool:
+    def is_homopolymer(self) -> bool:
         # Fast‑path: the indel itself is already a long enough run
         if len(set(self.indel_obj.indel_content)) == 1 and len(self.indel_obj.indel_content) >= 3:
             logger.debug(
@@ -73,7 +73,7 @@ class HomopolymerClassifier():
 
         return False
 
-    def _is_adjacent_to_homopolymer(self) -> bool:
+    def is_adjacent_to_homopolymer(self) -> bool:
         if len(self.indel_obj.prefix_context) >= 3:
             end_of_prefix = self.indel_obj.prefix_context[-3:]
             if len(set(end_of_prefix)) == 1:
@@ -98,4 +98,4 @@ class HomopolymerClassifier():
 
         """
 
-        return self.indel_obj._is_adjacent_to_homopolymer() or self.indel_obj._is_homopolymer()
+        return self.is_adjacent_to_homopolymer() or self.is_homopolymer()

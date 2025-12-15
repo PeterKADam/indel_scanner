@@ -8,7 +8,7 @@ import time
 import logging
 
 from indel import Indel
-from .IO import _write_records_to_tsv, cleanup_temp_dir
+from .IO import write_records_to_tsv, cleanup_temp_dir
 from .STR_Classifier import STRClassifier
 from .indel import INDEL_TYPE, TSV_HEADERS, Insertion, Deletion, Indel
 from .utils import Cigar, as_cigar
@@ -120,6 +120,7 @@ class ContigScanner:
                         ],
                         read_name=read.query_name,
                         in_STR=STR_Classifier.is_in_str(ref_pos_tracker),
+                        map_quality=read.mapping_quality,
                         indel_content=read.query_sequence[
                             read_pos_tracker : read_pos_tracker + length
                         ],
@@ -145,6 +146,7 @@ class ContigScanner:
                         ],
                         read_name=read.query_name,
                         in_STR=STR_Classifier.is_in_str(ref_pos_tracker),
+                        map_quality=read.mapping_quality,
                     )
             if op in REF_CONSUMING_OPS:
                 ref_pos_tracker += length
@@ -176,7 +178,7 @@ class ContigScanner:
 
         indel_generator = self._generate_indels_from_contig(samfile, fasta, contig_name)
 
-        _write_records_to_tsv(
+        write_records_to_tsv(
             output_path=temp_output_path,
             records=indel_generator,
             row_converter=lambda indel: indel.to_scanner_tsv_row(),

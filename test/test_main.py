@@ -1,4 +1,3 @@
-# tests/test_main.py (Fully Corrected)
 
 import pytest
 from unittest.mock import MagicMock
