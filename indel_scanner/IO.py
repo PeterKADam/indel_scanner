@@ -2,7 +2,7 @@ import csv
 import logging
 from pathlib import Path
 import shutil
-from typing import Iterable, Callable, List, Any, Optional, Union, Generator
+from typing import Callable, List, Any, Optional, Union, Generator
 import polars as pl
 from .indel import Insertion, Deletion, Indel
 

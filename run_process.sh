@@ -13,7 +13,7 @@ CONFIG_FILE="config.yaml"
 
 # Run the processor
 # This assumes you run it from the root of the 'indel_scanner' project directory
-python -m indel_scanner.main process\
+python -m cProfile -o profile_output.prof indel_scanner.main process\
 	--input "$OUTPUT_FILE" \
     --bam "$BAM_FILE" \
     --fasta "$FASTA_FILE" \

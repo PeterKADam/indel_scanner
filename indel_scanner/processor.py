@@ -6,7 +6,6 @@ from typing import List, Tuple, Dict
 import polars as pl
 import pyfastx
 import pysam
-from jedi.plugins.django import mapping
 from pysam import AlignedSegment
 
 from .IO import write_records_with_polars
@@ -34,6 +33,7 @@ READ_CONSUMING_OPS = {
     Cigar.OP_X,
 }
 
+
 class Processor:
     def __init__(self, config: ProcessorConfig):
         self.config = config
@@ -41,9 +41,9 @@ class Processor:
         self.bam_handle = None  # Will be initialized in __enter__
 
         # Structure: {contig: {read_name: [list_of_indel_objects]}}
-        self.indels_by_contig: Dict[
-            str, Dict[str, List[Indel]]
-        ] = defaultdict(lambda: defaultdict(list))
+        self.indels_by_contig: Dict[str, Dict[str, List[Indel]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
 
         self.insertion_output: List[Insertion] = []
         self.deletion_output: List[Deletion] = []
@@ -73,8 +73,9 @@ class Processor:
         logger.info(f"Loading and filtering indels from {self.config.input_file}...")
 
         try:
-
-            lazy_df = pl.scan_csv(self.config.input_file,separator="\t",has_header=True)
+            lazy_df = pl.scan_csv(
+                self.config.input_file, separator="\t", has_header=True
+            )
             df = lazy_df.collect()
 
             for row in df.iter_rows(named=True):
@@ -85,7 +86,9 @@ class Processor:
                 read_name = row["read_name"]
                 map_quality = row["map_quality"]
 
-                prefix,indel_seq,suffix = self._parse_sequence_context(row["[sequence]_context"])
+                prefix, indel_seq, suffix = self._parse_sequence_context(
+                    row["[sequence]_context"]
+                )
 
                 indel_obj = Indel.create(
                     contig=contig,
@@ -96,12 +99,13 @@ class Processor:
                     read_name=read_name,
                     type=indel_type,
                     indel_content=(
-                        indel_seq if indel_type == INDEL_TYPE.INSERTION
+                        indel_seq
+                        if indel_type == INDEL_TYPE.INSERTION
                         else self.reference.fetch(
-                        contig,
-                        (position, position + length - 1)
-                        if indel_type == INDEL_TYPE.DELETION
-                        else None
+                            contig,
+                            (position, position + length - 1)
+                            if indel_type == INDEL_TYPE.DELETION
+                            else None,
                         )
                     ),
                     in_STR=row["in_STR"],
@@ -112,21 +116,24 @@ class Processor:
                     self.indels_by_contig[contig][read_name].append(indel_obj)
                     logger.info(f"added indel {contig}:{position}:{indel_type}")
 
-
         except pl.exceptions.NoDataError:
-
             logger.warning(f"Input file is empty: {self.config.input_file}")
 
             return
 
         except Exception as e:
-
             logger.error(f"Failed to load indels with Polars: {e}")
 
             raise
 
-        num_indels = sum(len(indels) for reads in self.indels_by_contig.values() for indels in reads.values())
-        logger.info(f"Loaded {num_indels} indels across {len(self.indels_by_contig)} contigs.")
+        num_indels = sum(
+            len(indels)
+            for reads in self.indels_by_contig.values()
+            for indels in reads.values()
+        )
+        logger.info(
+            f"Loaded {num_indels} indels across {len(self.indels_by_contig)} contigs."
+        )
 
     def _process_bam_file(self):
         if not self.bam_handle:
@@ -135,11 +142,14 @@ class Processor:
         logger.info("Streaming BAM file and processing reads contig-by-contig...")
 
         filter_configuration = [
-            {'name': 'is_in_str'},
-            {'name': 'is_homopolymer'},
-            {'name': 'is_adjacent_to_homopolymer'},
-            {'name': 'poor_mapping_quality', 'params': {'min_mapq': self.config.get('min_mapq', 30)}},
-            {'name': 'similar_indels_in_other_reads'}
+            {"name": "is_in_str"},
+            {"name": "is_homopolymer"},
+            {"name": "is_adjacent_to_homopolymer"},
+            {
+                "name": "poor_mapping_quality",
+                "params": {"min_mapq": self.config.get("min_mapq", 30)},
+            },
+            {"name": "similar_indels_in_other_reads"},
         ]
 
         for contig, indels_on_this_contig in self.indels_by_contig.items():
@@ -155,11 +165,13 @@ class Processor:
 
                 if bam_read.query_name in indels_on_this_contig:
                     for indel_obj in indels_on_this_contig[bam_read.query_name]:
-                        #indel_obj.map_quality = bam_read.mapping_quality
+                        # indel_obj.map_quality = bam_read.mapping_quality
                         if indel_obj.type == INDEL_TYPE.INSERTION:
                             self._populate_insertion_quality(bam_read, indel_obj)
                         elif indel_obj.type == INDEL_TYPE.DELETION:
-                            self._populate_deletion_flanking_quality(bam_read, indel_obj)
+                            self._populate_deletion_flanking_quality(
+                                bam_read, indel_obj
+                            )
 
                         indels_for_this_contig.append(indel_obj)
 
@@ -172,12 +184,14 @@ class Processor:
             # ========================================================================
             indel_location_counts = defaultdict(int)
             for indel in indels_for_this_contig:
-                key = (indel.ref_position, indel.type, indel.length)  # Contig is constant here
+                key = (
+                    indel.ref_position,
+                    indel.type,
+                    indel.length,
+                )  # Contig is constant here
                 indel_location_counts[key] += 1
 
-            filter_context = {
-                "location_map": indel_location_counts
-            }
+            filter_context = {"location_map": indel_location_counts}
 
             # ========================================================================
             # Apply filters
@@ -192,8 +206,12 @@ class Processor:
                 elif indel_obj.type == INDEL_TYPE.DELETION:
                     self.deletion_output.append(indel_obj)
 
-        self.total_records_processed = len(self.insertion_output) + len(self.deletion_output)
-        logger.info(f"Finished processing. Total records: {self.total_records_processed}.")
+        self.total_records_processed = len(self.insertion_output) + len(
+            self.deletion_output
+        )
+        logger.info(
+            f"Finished processing. Total records: {self.total_records_processed}."
+        )
 
     def process(self):
         if not self.bam_handle or not self.reference:
@@ -310,15 +328,17 @@ class Processor:
     def write_output(self):
         if self.config.insertions_path and self.insertion_output:
             logger.info(
-                f"Writing {len(self.insertion_output)} insertions to {self.config.insertions_path} using Polars...")
-            write_records_with_polars(self.insertion_output, self.config.insertions_path)
+                f"Writing {len(self.insertion_output)} insertions to {self.config.insertions_path} using Polars..."
+            )
+            write_records_with_polars(
+                self.insertion_output, self.config.insertions_path
+            )
 
         if self.config.deletions_path and self.deletion_output:
             logger.info(
-                f"Writing {len(self.deletion_output)} deletions to {self.config.deletions_path} using Polars...")
+                f"Writing {len(self.deletion_output)} deletions to {self.config.deletions_path} using Polars..."
+            )
             write_records_with_polars(self.deletion_output, self.config.deletions_path)
-
-
 
 
 def run_processor(config):

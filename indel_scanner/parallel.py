@@ -19,14 +19,13 @@ def parallel_scan(scannerconfig):
     scanner = ContigScanner(scannerconfig)
 
     parallel_n = scannerconfig.num_processes or cpu_count()
-    logger.info(
-        f"Using {parallel_n} parallel processes."
-    )
+    logger.info(f"Using {parallel_n} parallel processes.")
 
     logger.info("Starting indel scanning process...")
 
     with pysam.AlignmentFile(str(scannerconfig.bamfile), "rb") as samfile:
         contigs = samfile.header.references
+        contigs = contigs[:10]  # --- IGNORE ---
         logger.info(f"found {len(contigs)} contigs.")
 
     # Define the columns for the progress bar for a nice look

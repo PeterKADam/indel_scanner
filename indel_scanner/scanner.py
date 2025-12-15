@@ -1,15 +1,16 @@
 import csv
 import os
 from pathlib import Path
-from typing import Generator, Iterable, Union, Optional
+from typing import Generator, Optional
 import pysam
 import pyfastx
 import time
 import logging
 
+from .indel import Indel, IndelTsvFormatter
 from .IO import write_records_to_tsv, cleanup_temp_dir
 from .STR_Classifier import STRClassifier
-from .indel import INDEL_TYPE, TSV_HEADERS, Insertion, Deletion, Indel
+from .indel import INDEL_TYPE, TSV_HEADERS
 from .utils import Cigar, as_cigar
 from .configurator import ScannerConfig
 
@@ -171,7 +172,7 @@ class ContigScanner:
         write_records_to_tsv(
             output_path=temp_output_path,
             records=indel_generator,
-            row_converter=lambda indel: indel.to_scanner_tsv_row(),
+            row_converter=lambda indel: IndelTsvFormatter.format_scanner_row(indel),
             buffer_size=self.config.buffer_size,
             # No header or sorting for this temporary file
         )

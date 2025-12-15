@@ -72,7 +72,7 @@ class ScannerConfig(BaseConfig):
         self.min_indel_size: int = self.yaml.get("min_indel_size", 1)
         self.preload: bool = self.yaml.get("preload_contigs", True)
         self.buffer_size: int = self.yaml.get("write_buffer_size", 100)
-        self.str_directory: Path = Path(self.yaml.get("strdir"))#type: ignore
+        self.str_directory: Path = Path(self.args.strdir)  # type: ignore
 
         # Run Scanner-specific action: Directory setup
         self._setup_output()
