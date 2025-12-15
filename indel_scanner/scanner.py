@@ -7,7 +7,6 @@ import pyfastx
 import time
 import logging
 
-from indel import Indel
 from .IO import write_records_to_tsv, cleanup_temp_dir
 from .STR_Classifier import STRClassifier
 from .indel import INDEL_TYPE, TSV_HEADERS, Insertion, Deletion, Indel
@@ -68,26 +67,16 @@ class ContigScanner:
             return None
 
     def _parse_cigar(
-        self, read: pysam.AlignedSegment, fasta: pyfastx.Fasta, contig_name: str
+        self, read: pysam.AlignedSegment, fasta: pyfastx.Fasta, contig_name: str, str_classifier: STRClassifier,contig_seq
     ) -> Generator[Indel, None, None]:
         ref_pos_tracker = read.reference_start
         read_pos_tracker = 0
 
-        assert read is not None, logger.error("Read is None?")  # Read is None
-        assert read.query_sequence is not None, logger.error(
-            "Read has no query sequence"
-        )
-        assert read.cigartuples is not None, logger.error(
-            "No CIGAR information available"
-        )
-        assert read.reference_name is not None, logger.error(
-            "No reference_name information available"
-        )
-        assert read.query_name is not None, logger.error(
-            "No query_name information available"
-        )
+        if read is None or read.query_sequence is None or read.cigartuples is None:
+            logger.warning(f"Skipping read with missing data: {read.query_name}")
+            return
 
-        STR_Classifier = STRClassifier(self.config, contig_name)
+
 
         for op_int, length in read.cigartuples:
             op = as_cigar(op_int)
@@ -119,7 +108,7 @@ class ContigScanner:
                             read_pos_tracker + length : read_pos_tracker + length + 5
                         ],
                         read_name=read.query_name,
-                        in_STR=STR_Classifier.is_in_str(ref_pos_tracker),
+                        in_STR=str_classifier.is_in_str(ref_pos_tracker),
                         map_quality=read.mapping_quality,
                         indel_content=read.query_sequence[
                             read_pos_tracker : read_pos_tracker + length
@@ -128,8 +117,6 @@ class ContigScanner:
 
             elif op == Cigar.OP_D:
                 if length >= self.config.min_indel_size:
-                    contig_seq = fasta[contig_name].seq
-
                     yield Indel.create(
                         contig=read.reference_name,
                         ref_position=ref_pos_tracker,
@@ -145,7 +132,7 @@ class ContigScanner:
                             ref_pos_tracker + length : ref_pos_tracker + length + 5
                         ],
                         read_name=read.query_name,
-                        in_STR=STR_Classifier.is_in_str(ref_pos_tracker),
+                        in_STR=str_classifier.is_in_str(ref_pos_tracker),
                         map_quality=read.mapping_quality,
                     )
             if op in REF_CONSUMING_OPS:
@@ -154,7 +141,7 @@ class ContigScanner:
                 read_pos_tracker += length
 
     def _generate_indels_from_contig(
-        self, samfile: pysam.AlignmentFile, fasta: pyfastx.Fasta, contig_name: str
+        self, samfile: pysam.AlignmentFile, fasta: pyfastx.Fasta, contig_name: str,str_classifier: STRClassifier,contig_seq
     ) -> Generator[Indel, None, None]:
         for read in samfile.fetch(contig=contig_name):
             if (
@@ -165,7 +152,7 @@ class ContigScanner:
             ):
                 continue
 
-            yield from self._parse_cigar(read, fasta, contig_name)
+            yield from self._parse_cigar(read, fasta, contig_name,str_classifier,contig_seq)
 
     def _process_reads(
         self,
@@ -176,7 +163,10 @@ class ContigScanner:
     ):
         start_time = time.time()
 
-        indel_generator = self._generate_indels_from_contig(samfile, fasta, contig_name)
+        str_classifier = STRClassifier(self.config,contig_name)
+        contig_seq = fasta[contig_name].seq
+
+        indel_generator = self._generate_indels_from_contig(samfile, fasta, contig_name,str_classifier,contig_seq)
 
         write_records_to_tsv(
             output_path=temp_output_path,
