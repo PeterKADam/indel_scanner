@@ -9,13 +9,14 @@ from rich.progress import (
 from multiprocessing import Pool, cpu_count
 import logging
 
+from .configurator import ScannerConfig
 from .scanner import ContigScanner, run_scan, aggregate_partial_results
 
 
 logger = logging.getLogger(__name__)
 
 
-def parallel_scan(scannerconfig):
+def parallel_scan(scannerconfig: ScannerConfig):
     scanner = ContigScanner(scannerconfig)
 
     parallel_n = scannerconfig.num_processes or cpu_count()

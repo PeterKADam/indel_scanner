@@ -9,17 +9,28 @@ logger = logging.getLogger(__name__)
 
 # --- Core Data Definitions ---
 
+
 class INDEL_TYPE(StrEnum):
     INSERTION = "ins"
     DELETION = "del"
 
+
 class TSV_HEADERS(Enum):
     SCANNER = [
-        "contig", "ref_position", "type", "length",
-        "[sequence]_context", "read_name", "in_STR","filter_reason","map_quality"
+        "contig",
+        "ref_position",
+        "type",
+        "length",
+        "[sequence]_context",
+        "read_name",
+        "in_STR",
+        "filter_reason",
+        "map_quality",
     ]
     PROCESSOR = SCANNER + [
-        "prefix_quality", "insertion_quality", "suffix_quality",
+        "prefix_quality",
+        "insertion_quality",
+        "suffix_quality",
     ]
 
 
@@ -28,6 +39,7 @@ class Indel(ABC):
     """
     An abstract factory class representing a generic Insertion or Deletion.
     """
+
     # Core attributes
     contig: str
     ref_position: int
@@ -37,43 +49,57 @@ class Indel(ABC):
     suffix_context: str
     read_name: str
     in_STR: bool
+    map_quality: int
 
     # Attributes populated from BAM file
     type: INDEL_TYPE
-    map_quality: Optional[int] = None
     filter_reason: List[str] = field(default_factory=list)
 
     @classmethod
     def create(
         cls,
-        type: INDEL_TYPE, *,
-        contig: str, ref_position: int, length: int,
-        prefix_context: str, indel_content: str, suffix_context: str,
-        read_name: str, in_STR: bool, map_quality: Optional[int],
+        type: INDEL_TYPE,
+        *,
+        contig: str,
+        ref_position: int,
+        length: int,
+        prefix_context: str,
+        indel_content: str,
+        suffix_context: str,
+        read_name: str,
+        in_STR: bool,
+        map_quality: Optional[int],
         # Subclass-specific arguments
-        insertion_quality: Optional[List[int]] = None,
+        indel_quality: Optional[List[int]] = None,
         prefix_quality: Optional[List[int]] = None,
         suffix_quality: Optional[List[int]] = None,
     ) -> Indel:
         """Factory method to create an Insertion or Deletion object."""
         common_args = {
-            "contig": contig, "ref_position": ref_position, "length": length,
-            "prefix_context": prefix_context, "indel_content": indel_content,
-            "suffix_context": suffix_context, "read_name": read_name,
-            "in_STR": in_STR, "map_quality": map_quality,
+            "contig": contig,
+            "ref_position": ref_position,
+            "length": length,
+            "prefix_context": prefix_context,
+            "indel_content": indel_content,
+            "suffix_context": suffix_context,
+            "read_name": read_name,
+            "in_STR": in_STR,
+            "map_quality": map_quality,
         }
         if type == INDEL_TYPE.INSERTION:
             return Insertion(
-                type=INDEL_TYPE.INSERTION, **common_args,
-                insertion_quality=insertion_quality,
+                type=INDEL_TYPE.INSERTION,
+                **common_args,
+                indel_quality=indel_quality,
                 prefix_quality=prefix_quality,
-                suffix_quality=suffix_quality
+                suffix_quality=suffix_quality,
             )
         elif type == INDEL_TYPE.DELETION:
             return Deletion(
-                type=INDEL_TYPE.DELETION, **common_args,
+                type=INDEL_TYPE.DELETION,
+                **common_args,
                 prefix_quality=prefix_quality,
-                suffix_quality=suffix_quality
+                suffix_quality=suffix_quality,
             )
         else:
             raise ValueError(f"Unknown INDEL_TYPE: {type}")
@@ -94,10 +120,11 @@ class Indel(ABC):
         """
         raise NotImplementedError
 
+
 @dataclass
 class Insertion(Indel):
     type: INDEL_TYPE = INDEL_TYPE.INSERTION
-    insertion_quality: Optional[List[int]] = None
+    indel_quality: Optional[List[int]] = None
     prefix_quality: Optional[List[int]] = None
     suffix_quality: Optional[List[int]] = None
 
@@ -111,10 +138,12 @@ class Insertion(Indel):
             "read_name": self.read_name,
             "in_STR": self.in_STR,
             "prefix_quality": self.prefix_quality,
-            "insertion_quality": self.insertion_quality,
+            "insertion_quality": self.indel_quality,
             "suffix_quality": self.suffix_quality,
             "map_quality": self.map_quality,
+            "filter_reason": self.filter_reason,
         }
+
 
 @dataclass
 class Deletion(Indel):
@@ -135,6 +164,7 @@ class Deletion(Indel):
             "insertion_quality": None,  # Deletions explicitly have no insertion quality
             "suffix_quality": self.suffix_quality,
             "map_quality": self.map_quality,
+            "filter_reason": self.filter_reason,
         }
 
 
@@ -160,7 +190,8 @@ class IndelTsvFormatter:
             indel.sequencecontext_brackets(),
             indel.read_name,
             str(indel.in_STR),
-            ", ".join(indel.filter_reason) # Assuming filter_reason should be a string
+            ",".join(indel.filter_reason) if indel.filter_reason else "NA",
+            str(indel.map_quality),  # Assuming filter_reason should be a string
         ]
 
     @staticmethod
@@ -173,23 +204,24 @@ class IndelTsvFormatter:
         base_row = IndelTsvFormatter.format_scanner_row(indel)
 
         if isinstance(indel, Insertion):
-            base_row.extend([
-                IndelTsvFormatter._format_quality_scores(indel.prefix_quality),
-                IndelTsvFormatter._format_quality_scores(indel.insertion_quality),
-                IndelTsvFormatter._format_quality_scores(indel.suffix_quality),
-                str(indel.map_quality),
-            ])
+            base_row.extend(
+                [
+                    IndelTsvFormatter._format_quality_scores(indel.prefix_quality),
+                    IndelTsvFormatter._format_quality_scores(indel.indel_quality),
+                    IndelTsvFormatter._format_quality_scores(indel.suffix_quality),
+                    str(indel.map_quality),
+                ]
+            )
         elif isinstance(indel, Deletion):
-            base_row.extend([
-                IndelTsvFormatter._format_quality_scores(indel.prefix_quality),
-                "NA",  # Placeholder for insertion_quality
-                IndelTsvFormatter._format_quality_scores(indel.suffix_quality),
-                str(indel.map_quality),
-            ])
+            base_row.extend(
+                [
+                    IndelTsvFormatter._format_quality_scores(indel.prefix_quality),
+                    "NA",  # Placeholder for insertion_quality
+                    IndelTsvFormatter._format_quality_scores(indel.suffix_quality),
+                    str(indel.map_quality),
+                ]
+            )
         else:
             raise TypeError(f"Unsupported Indel type for formatting: {type(indel)}")
 
         return base_row
-
-
-

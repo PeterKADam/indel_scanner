@@ -114,7 +114,7 @@ class Processor:
 
                 if indel_obj:
                     self.indels_by_contig[contig][read_name].append(indel_obj)
-                    logger.info(f"added indel {contig}:{position}:{indel_type}")
+                    # logger.info(f"added indel {contig}:{position}:{indel_type}")
 
         except pl.exceptions.NoDataError:
             logger.warning(f"Input file is empty: {self.config.input_file}")
@@ -147,9 +147,23 @@ class Processor:
             {"name": "is_adjacent_to_homopolymer"},
             {
                 "name": "poor_mapping_quality",
-                "params": {"min_mapq": self.config.get("min_mapq", 30)},
+                "params": {"min_mapq": self.config.yaml.get("min_mapping_quality", 60)},
             },
             {"name": "similar_indels_in_other_reads"},
+            {
+                "name": "low_minimum_indel_quality",
+                "params": {
+                    "min_quality": self.config.yaml.get("min_indel_quality", 93)
+                },
+            },
+            {
+                "name": "low_minimum_flanking_quality",
+                "params": {
+                    "min_flank_quality": self.config.yaml.get(
+                        "min_flanking_quality", 93
+                    )
+                },
+            },
         ]
 
         for contig, indels_on_this_contig in self.indels_by_contig.items():
@@ -255,7 +269,7 @@ class Processor:
                 insertion.prefix_quality = list(
                     qualities[prefix_start:read_pos_tracker]
                 )
-                insertion.insertion_quality = list(
+                insertion.indel_quality = list(
                     qualities[read_pos_tracker:insertion_end]
                 )
                 insertion.suffix_quality = list(qualities[insertion_end:suffix_end])

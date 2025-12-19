@@ -68,7 +68,12 @@ class ContigScanner:
             return None
 
     def _parse_cigar(
-        self, read: pysam.AlignedSegment, fasta: pyfastx.Fasta, contig_name: str, str_classifier: STRClassifier,contig_seq
+        self,
+        read: pysam.AlignedSegment,
+        fasta: pyfastx.Fasta,
+        contig_name: str,
+        str_classifier: STRClassifier,
+        contig_seq,
     ) -> Generator[Indel, None, None]:
         ref_pos_tracker = read.reference_start
         read_pos_tracker = 0
@@ -76,8 +81,6 @@ class ContigScanner:
         if read is None or read.query_sequence is None or read.cigartuples is None:
             logger.warning(f"Skipping read with missing data: {read.query_name}")
             return
-
-
 
         for op_int, length in read.cigartuples:
             op = as_cigar(op_int)
@@ -142,7 +145,12 @@ class ContigScanner:
                 read_pos_tracker += length
 
     def _generate_indels_from_contig(
-        self, samfile: pysam.AlignmentFile, fasta: pyfastx.Fasta, contig_name: str,str_classifier: STRClassifier,contig_seq
+        self,
+        samfile: pysam.AlignmentFile,
+        fasta: pyfastx.Fasta,
+        contig_name: str,
+        str_classifier: STRClassifier,
+        contig_seq,
     ) -> Generator[Indel, None, None]:
         for read in samfile.fetch(contig=contig_name):
             if (
@@ -153,7 +161,9 @@ class ContigScanner:
             ):
                 continue
 
-            yield from self._parse_cigar(read, fasta, contig_name,str_classifier,contig_seq)
+            yield from self._parse_cigar(
+                read, fasta, contig_name, str_classifier, contig_seq
+            )
 
     def _process_reads(
         self,
@@ -164,10 +174,12 @@ class ContigScanner:
     ):
         start_time = time.time()
 
-        str_classifier = STRClassifier(self.config,contig_name)
+        str_classifier = STRClassifier(self.config, contig_name)
         contig_seq = fasta[contig_name].seq
 
-        indel_generator = self._generate_indels_from_contig(samfile, fasta, contig_name,str_classifier,contig_seq)
+        indel_generator = self._generate_indels_from_contig(
+            samfile, fasta, contig_name, str_classifier, contig_seq
+        )
 
         write_records_to_tsv(
             output_path=temp_output_path,
@@ -190,10 +202,8 @@ def run_scan(scanner: ContigScanner, contig_name):
 
 def aggregate_partial_results(temp_dir, final_output_path):
     logger.info("\nAll contigs processed. Merging results...")
-    logger.debug(
-        f"Aggregating partial results from {temp_dir} into {final_output_path}"
-    )
-
+    final_output_path = Path(final_output_path) / "indel_scanner_results.tsv"
+    logger.info(f"Aggregating partial results from {temp_dir} into {final_output_path}")
     with open(final_output_path, "w", newline="") as f_out:
         writer = csv.writer(f_out, delimiter="\t")
 
@@ -210,7 +220,10 @@ def aggregate_partial_results(temp_dir, final_output_path):
                 with open(part_path, "r") as f_in:
                     reader = csv.reader(f_in, delimiter="\t")
                     for row in reader:
+                        if len(row) != 9:
+                            logger.info(f"Skipping malformed row in {part_file}: {row}")
+                            continue
                         writer.writerow(row)
 
     logger.debug(f"Aggregation complete. Final output written to {final_output_path}")
-    cleanup_temp_dir(temp_dir)
+    # cleanup_temp_dir(temp_dir)

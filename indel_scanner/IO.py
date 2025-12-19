@@ -14,11 +14,16 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
     if not records:
         return
 
-    data = [r.to_processor_dict() for r in records]  # We'll need to add this method
+    data = [r.to_processor_dict() for r in records]
     df = pl.DataFrame(data)
 
     def format_list_col(col_name: str) -> pl.Expr:
-        return pl.col(col_name).list.join(",").fill_null("NA")
+        return (
+            pl.col(col_name)
+            .cast(pl.List(pl.String))
+            .list.join(",")
+            .fill_null("NA")
+        )
 
     final_df = df.select(
         pl.col("contig"),
@@ -29,12 +34,16 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
         pl.col("read_name"),
         pl.col("in_STR"),
         format_list_col("prefix_quality"),
-        format_list_col("insertion_quality"),  # Will be null for deletions, handled by fill_null
+        format_list_col(
+            "insertion_quality"
+        ),  # Will be null for deletions, handled by fill_null
         format_list_col("suffix_quality"),
+        format_list_col("filter_reason").alias("filter_reason"),
         pl.col("map_quality"),
     )
 
     final_df.sort(["contig", "ref_position"]).write_csv(path, separator="\t")
+
 
 def write_records_to_tsv(
     output_path: Path,

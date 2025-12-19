@@ -23,3 +23,6 @@ process:
   # min_vaf_threshold: 0.05
   # pass_filter: true
   output_format: tsv
+  min_indel_quality: 93
+  min_flanking_quality: 93
+  min_mapq: 60

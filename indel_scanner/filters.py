@@ -4,7 +4,7 @@ from typing import List, Dict, Callable, Any, DefaultDict
 
 # Assuming these are defined elsewhere
 from .homopolymer_classifier import HomopolymerClassifier
-from .indel import Indel
+from .indel import INDEL_TYPE, Indel
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class IndelFilters:
     @staticmethod
     def _poor_mapping_quality(indel: Indel, min_mapq: int = 30, **kwargs) -> None:
         if indel.map_quality <= min_mapq:
-            indel.filter_reason.append(f"poor_mapping_quality_<{min_mapq}")
+            indel.filter_reason.append("poor_mapping_quality")
 
     @staticmethod
     def _similar_indels_in_other_reads(
@@ -41,14 +41,42 @@ class IndelFilters:
             indel.filter_reason.append("similar_indels_in_other_reads")
 
     @staticmethod
+    def _low_minimum_indel_quality(
+        indel: Indel, min_quality: int = 93, **kwargs
+    ) -> None:
+        if indel.type != INDEL_TYPE.INSERTION:
+            return
+        if min(indel.indel_quality) < min_quality:
+            indel.filter_reason.append("low_minimum_indel_quality")
+
+    @staticmethod
+    def _low_minimum_flanking_quality(
+        indel: Indel, min_flank_quality: int = 93, **kwargs
+    ) -> None:
+        if (
+            min(indel.prefix_quality) < min_flank_quality
+            or min(indel.suffix_quality) < min_flank_quality
+        ):
+            indel.filter_reason.append("low_minimum_flanking_quality")
+
+    @staticmethod
+    def _low_singlebase_flanking_quality(
+        indel: Indel, min_flank_quality: int = 93, **kwargs
+    ) -> None:
+        if (int(indel.prefix_quality[-1]) < min_flank_quality) or (
+            int(indel.suffix_quality[0]) < min_flank_quality
+        ):
+            indel.filter_reason.append("low_singlebase_flanking_quality")
+
+    @staticmethod
     def apply(
         active_filters: List[Dict[str, Any]], indel: Indel, **context: Any
     ) -> None:
         for config in active_filters:
             filter_name = config.get("name")
             params = config.get("params", {})
-            if filter_name in IndelFilters._all_filters:
-                filter_func = IndelFilters._all_filters[filter_name]
+            if filter_name in IndelFilters_all_filters:
+                filter_func = IndelFilters_all_filters[filter_name]
                 try:
                     filter_func(indel, **params, **context)
                 except TypeError as e:
@@ -65,4 +93,7 @@ IndelFilters_all_filters: Dict[str, Callable] = {
     "is_homopolymer": IndelFilters._is_homopolymer,
     "poor_mapping_quality": IndelFilters._poor_mapping_quality,
     "similar_indels_in_other_reads": IndelFilters._similar_indels_in_other_reads,
+    "low_minimum_indel_quality": IndelFilters._low_minimum_indel_quality,
+    "low_minimum_flanking_quality": IndelFilters._low_minimum_flanking_quality,
+    "low_singlebase_flanking_quality": IndelFilters._low_singlebase_flanking_quality,
 }
