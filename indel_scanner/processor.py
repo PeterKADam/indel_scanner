@@ -145,10 +145,6 @@ class Processor:
             {"name": "is_in_str"},
             {"name": "is_homopolymer"},
             {"name": "is_adjacent_to_homopolymer"},
-            {
-                "name": "poor_mapping_quality",
-                "params": {"min_mapq": self.config.yaml.get("min_mapping_quality", 60)},
-            },
             {"name": "similar_indels_in_other_reads"},
             {
                 "name": "low_minimum_indel_quality",
@@ -157,10 +153,10 @@ class Processor:
                 },
             },
             {
-                "name": "low_minimum_flanking_quality",
+                "name": "low_singlebase_flanking_quality",
                 "params": {
                     "min_flank_quality": self.config.yaml.get(
-                        "min_flanking_quality", 93
+                        "min_singlebase_flanking_quality", 93
                     )
                 },
             },

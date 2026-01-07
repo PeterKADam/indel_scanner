@@ -2,7 +2,7 @@ import bisect
 from pathlib import Path
 from typing import List, Tuple
 
-from indel_scanner.configurator import ScannerConfig
+from indel_scanner.configurator import Config
 
 
 class STRClassifier:
@@ -14,7 +14,7 @@ class STRClassifier:
     but query positions arrive in an arbitrary (unsorted) order.
     """
 
-    def __init__(self, config: ScannerConfig, contig: str):
+    def __init__(self, config: Config, contig: str):
         """
         Initializes the classifier by preparing lists for binary search.
 
@@ -95,9 +95,7 @@ class STRClassifier:
         if not self.num_regions:
             return False
 
-        
         idx = bisect.bisect_right(self.starts, position)
-
 
         if idx == 0:
             # The position is before the start of all known regions.

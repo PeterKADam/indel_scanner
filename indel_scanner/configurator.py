@@ -118,6 +118,23 @@ class ProcessorConfig(BaseConfig):
         )
 
 
+class DNM_estimateConfig(BaseConfig):
+    str_directory: Path
+
+    def __init__(self, args: argparse.Namespace, config_data: dict):
+        super().__init__(args, config_data)
+        self._initialize_mode_specific_attributes()
+
+    def _initialize_mode_specific_attributes(self):
+        """Sets DNM_estimate-specific fields."""
+        logger.info("Configuration Mode: DNM_estimate")
+
+        # Load settings from the YAML data, with sensible defaults
+        self.sampling_fraction: float = self.yaml.get("sampling_fraction", 0.01)
+        self.min_homopolymer_len: int = self.yaml.get("min_homopolymer_len", 3)
+        self.str_directory: Path = Path(self.args.strdir)  # type: ignore
+
+
 class Config:
     """Public static factory interface to load a specialized configuration object."""
 
