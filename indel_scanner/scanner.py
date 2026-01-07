@@ -32,7 +32,6 @@ READ_CONSUMING_OPS = {
     Cigar.OP_X,
 }
 
-
 class ContigScanner:
     """
     A class to encapsulate the configuration and logic for scanning contigs.
@@ -139,6 +138,7 @@ class ContigScanner:
                         in_STR=str_classifier.is_in_str(ref_pos_tracker),
                         map_quality=read.mapping_quality,
                     )
+
             if op in REF_CONSUMING_OPS:
                 ref_pos_tracker += length
             if op in READ_CONSUMING_OPS:

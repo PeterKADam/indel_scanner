@@ -33,7 +33,6 @@ READ_CONSUMING_OPS = {
     Cigar.OP_X,
 }
 
-
 class Processor:
     def __init__(self, config: ProcessorConfig):
         self.config = config
