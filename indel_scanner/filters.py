@@ -1,15 +1,28 @@
+# indel_scanner/filters.py
 import logging
-from functools import partial
-from typing import List, Dict, Callable, Any, DefaultDict
-
-# Assuming these are defined elsewhere
+from typing import Dict, Callable, Any, DefaultDict, List
 from .homopolymer_classifier import HomopolymerClassifier
+from .STR_Classifier import STRClassifier
 from .indel import INDEL_TYPE, Indel
 
 logger = logging.getLogger(__name__)
 
 
 class IndelFilters:
+
+    @staticmethod
+    def check_if_in_str(position: int, str_classifier: STRClassifier) -> bool:
+        """Checks if a genomic position is within a classified STR."""
+        return str_classifier.is_in_str(position)
+
+    @staticmethod
+    def check_if_homopolymer_context(ref_seq: str, position: int) -> bool:
+        """
+        Checks if a genomic position is in or adjacent to a homopolymer context.
+        This reuses the HomopolymerClassifier logic for a single source of truth.
+        """
+        return HomopolymerClassifier.is_position_in_homopolymer_context(ref_seq, position)
+
     @staticmethod
     def _is_in_str(indel: Indel, **kwargs) -> None:
         if indel.in_STR:
