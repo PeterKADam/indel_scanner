@@ -1,28 +1,64 @@
-# indel_scanner/config.yaml
-
-# ==================================
-# SCANNER CONFIGURATION (for 'scan' command)
-# ==================================
+# -----------------------------------------------------------------------------
+# Configuration for the 'scan' command
+# -----------------------------------------------------------------------------
 scan:
-  # --- Analysis Parameters ---
+  # --- Performance and Resource Management ---
+  # Number of parallel worker processes to use for scanning contigs.
+  # Default: The number of CPU cores on your machine.
+  num_processes: 8
+
+  # If true, preloads contig sequences into memory for each worker.
+  # This can be faster if you have enough RAM but should be set to false
+  # for very large reference genomes on memory-limited systems.
+  # Default: true
+  preload_contigs: true
+
+  # Number of indel records to buffer in memory before writing to a temporary file.
+  # A larger buffer can improve I/O performance but uses more memory.
+  # Default: 100
+  write_buffer_size: 50000
+
+  # --- Filtering Parameters for the SCANNER ---
+  # These filters are applied during the initial, fast scan. They are used for both
+  # generating the numerator candidates and for calculating the denominator (L_interrogated).
+
+  # Minimum size of an indel to be considered.
+  # Default: 1
   min_indel_size: 1
-  min_mapping_quality: 20
 
-  # --- Performance Parameters ---
-  # Number of parallel processes to use. 'null' means use all available CPU cores.
-  num_processes: 30
-  preload_contigs: true 
-  write_buffer_size: 100
+  # Minimum mapping quality (MAPQ) for a read to be considered for analysis.
+  # Any read with MAPQ below this value will be ignored for both numerator and denominator.
+  # Default: 30
+  min_map_quality: 30
 
-# ==================================
-# PROCESSOR CONFIGURATION (for 'process' command - currently empty)
-# ==================================
+  # Minimum base quality (Phred score) for a base to be considered "callable"
+  # as part of the denominator.
+  # Default: 20
+  min_base_quality: 93
+
+  # Minimum base quality (Phred score) for the bases immediately flanking a
+  # potential indel site. A base position is only included in the denominator
+  # if its neighbors (pos and pos+1) in the read meet this quality.
+  # Default: 93
+  min_flank_quality: 93
+
+# -----------------------------------------------------------------------------
+# Configuration for the 'process' command
+# -----------------------------------------------------------------------------
 process:
-  # Example placeholders for future processing logic:
-  # min_read_count: 5
-  # min_vaf_threshold: 0.05
-  # pass_filter: true
-  output_format: tsv
+  # --- Filtering Parameters for the PROCESSOR ---
+  # These filters are applied after the initial scan, when aggregating results
+  # and performing more complex checks (like the singleton filter).
+
+  # Minimum quality for any base within an INSERTION. If any base in an inserted
+  # sequence is below this quality, the insertion is filtered out.
+  # This has no effect on deletions.
+  # Default: 93
   min_indel_quality: 93
-  min_flanking_quality: 93
-  min_mapq: 60
+
+  # Minimum quality for the single base immediately flanking an indel.
+  # This is a stricter check than the one in the scanner and is applied
+  # after quality scores have been fully populated.
+  # Default: 93
+  min_singlebase_flanking_quality: 93
+
