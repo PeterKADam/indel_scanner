@@ -1,8 +1,12 @@
 # indel_scanner/parallel.py
 from functools import partial
+from pathlib import Path
 import pysam
 from rich.progress import (
-    Progress, BarColumn, TextColumn, TimeElapsedColumn,
+    Progress,
+    BarColumn,
+    TextColumn,
+    TimeElapsedColumn,
 )
 from multiprocessing import Pool, cpu_count
 import logging
@@ -10,6 +14,7 @@ from .configurator import ScannerConfig
 from .scanner import ContigScanner, run_scan, aggregate_partial_results
 
 logger = logging.getLogger(__name__)
+
 
 def parallel_scan(scannerconfig: ScannerConfig) -> tuple[Path, int]:
     scanner = ContigScanner(scannerconfig)

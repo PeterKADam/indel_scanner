@@ -9,6 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class BaseConfig:
     def __init__(self, args: argparse.Namespace, config_data: dict) -> None:
         self.args = args
@@ -20,8 +21,10 @@ class BaseConfig:
         if self.mode == "process":
             self.input_file: Path = Path(self.args.input)
 
+
 class ScannerConfig(BaseConfig):
     """Configuration specific to the scanner mode."""
+
     temp_dir: Path
     min_indel_size: int
     preload: bool
@@ -30,6 +33,7 @@ class ScannerConfig(BaseConfig):
     min_map_quality: int
     min_base_quality: int
     min_flank_quality: int
+    min_homopolymer_len: int = 3
 
     def __init__(self, args: argparse.Namespace, config_data: dict):
         super().__init__(args, config_data)
@@ -70,6 +74,7 @@ class ScannerConfig(BaseConfig):
         self._setup_output()
         logger.info("Scanner output directories configured and cleaned.")
 
+
 class ProcessorConfig(BaseConfig):
     def __init__(self, args: argparse.Namespace, config_data: dict):
         super().__init__(args, config_data)
@@ -87,7 +92,9 @@ class ProcessorConfig(BaseConfig):
         try:
             self.output_path.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            logger.error(f"Could not create output directory at {self.output_path}: {e}")
+            logger.error(
+                f"Could not create output directory at {self.output_path}: {e}"
+            )
             sys.exit(1)
         return self.output_path
 
@@ -98,6 +105,7 @@ class ProcessorConfig(BaseConfig):
         logger.info(
             f"Processor output configured (Format: {self.output_format}). No directory cleanup performed."
         )
+
 
 class DNM_estimateConfig(BaseConfig):
     str_directory: Path
@@ -112,6 +120,7 @@ class DNM_estimateConfig(BaseConfig):
         self.sampling_fraction: float = self.yaml.get("sampling_fraction", 0.01)
         self.min_homopolymer_len: int = self.yaml.get("min_homopolymer_len", 3)
         self.str_directory: Path = Path(self.args.strdir)  # type: ignore
+
 
 class Config:
     @staticmethod
@@ -128,13 +137,19 @@ class Config:
             "-b", "--bam", required=True, help="Input BAM file (must be indexed)."
         )
         scan_parser.add_argument(
-            "-f", "--fasta", required=True, help="Reference FASTA file (must be indexed)."
+            "-f",
+            "--fasta",
+            required=True,
+            help="Reference FASTA file (must be indexed).",
         )
         scan_parser.add_argument(
             "-o", "--output", required=True, help="Path to the output directory."
         )
         scan_parser.add_argument(
-            "-c", "--config", default="config.yaml", help="Path to the configuration file."
+            "-c",
+            "--config",
+            default="config.yaml",
+            help="Path to the configuration file.",
         )
         scan_parser.add_argument(
             "-s", "--strdir", required=True, help="Directory containing STR results."
@@ -164,7 +179,10 @@ class Config:
             "-o", "--output", required=True, help="Path for the processed output file."
         )
         process_parser.add_argument(
-            "-c", "--config", default="config.yaml", help="Path to the configuration file."
+            "-c",
+            "--config",
+            default="config.yaml",
+            help="Path to the configuration file.",
         )
         return parser.parse_args()
 

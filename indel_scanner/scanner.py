@@ -8,18 +8,19 @@ import pyfastx
 import time
 import logging
 
-from.indel import Indel, IndelTsvFormatter
-from.IO import write_records_to_tsv
-from.STR_Classifier import STRClassifier
-from.filters import IndelFilters
-from.indel import INDEL_TYPE, TSV_HEADERS
-from.utils import Cigar, as_cigar
-from.configurator import ScannerConfig
+from .indel import Indel, IndelTsvFormatter
+from .IO import write_records_to_tsv
+from .STR_Classifier import STRClassifier
+from .filters import IndelFilters
+from .indel import INDEL_TYPE, TSV_HEADERS
+from .utils import Cigar, as_cigar
+from .configurator import ScannerConfig
 
 logger = logging.getLogger(__name__)
 
 REF_CONSUMING_OPS = {Cigar.OP_M, Cigar.OP_D, Cigar.OP_N, Cigar.OP_EQ, Cigar.OP_X}
 READ_CONSUMING_OPS = {Cigar.OP_M, Cigar.OP_I, Cigar.OP_S, Cigar.OP_EQ, Cigar.OP_X}
+
 
 class ContigScanner:
     def __init__(self, config: ScannerConfig):
@@ -40,10 +41,10 @@ class ContigScanner:
             return None
 
     def _parse_cigar_for_candidates(
-            self,
-            read: pysam.AlignedSegment,
-            str_classifier: STRClassifier,
-            contig_seq: str,
+        self,
+        read: pysam.AlignedSegment,
+        str_classifier: STRClassifier,
+        contig_seq: str,
     ) -> Generator[Indel, None, None]:
         ref_pos_tracker = read.reference_start
         read_pos_tracker = 0
@@ -100,36 +101,37 @@ class ContigScanner:
                 read_pos_tracker += length
 
     def _is_callable_at_position(
-            self,
-            read: pysam.AlignedSegment,
-            read_pos: int,
-            ref_pos: int,
-            str_classifier: STRClassifier,
-            contig_seq: str,
+        self,
+        read: pysam.AlignedSegment,
+        read_pos: int,
+        ref_pos: int,
+        str_classifier: STRClassifier,
+        contig_seq: str,
     ) -> bool:
-
         if read_pos >= len(read.query_qualities) - 1:
             return False  # Cannot form a flank pair at the very end of a read.
 
         if (
-                read.query_qualities[read_pos] < self.config.min_flank_quality
-                or read.query_qualities[read_pos + 1] < self.config.min_flank_quality
+            read.query_qualities[read_pos] < self.config.min_flank_quality
+            or read.query_qualities[read_pos + 1] < self.config.min_flank_quality
         ):
             return False
 
         if IndelFilters.check_if_in_str(ref_pos, str_classifier):
             return False
-        if IndelFilters.check_if_homopolymer_context(contig_seq, ref_pos):
+        if IndelFilters.check_if_homopolymer_context(
+            contig_seq, ref_pos, self.config.min_homopolymer_len
+        ):
             return False
 
         return True
 
     def _process_reads_single_pass(
-            self,
-            samfile: pysam.AlignmentFile,
-            contig_name: str,
-            temp_output_path: Path,
-            fasta: pyfastx.Fasta,
+        self,
+        samfile: pysam.AlignmentFile,
+        contig_name: str,
+        temp_output_path: Path,
+        fasta: pyfastx.Fasta,
     ):
         start_time = time.time()
         str_classifier = STRClassifier(self.config, contig_name)
@@ -140,12 +142,12 @@ class ContigScanner:
             nonlocal interrogated_bases_count
             for read in samfile.fetch(contig=contig_name):
                 if (
-                        read.is_unmapped
-                        or read.is_secondary
-                        or read.is_supplementary
-                        or read.mapping_quality < self.config.min_map_quality
-                        or read.query_sequence is None
-                        or read.query_qualities is None
+                    read.is_unmapped
+                    or read.is_secondary
+                    or read.is_supplementary
+                    or read.mapping_quality < self.config.min_map_quality
+                    or read.query_sequence is None
+                    or read.query_qualities is None
                 ):
                     continue
 
@@ -154,7 +156,7 @@ class ContigScanner:
                     if ref_pos is None:
                         continue
                     if self._is_callable_at_position(
-                            read, read_pos, ref_pos, str_classifier, contig_seq
+                        read, read_pos, ref_pos, str_classifier, contig_seq
                     ):
                         interrogated_bases_count += 1
 
@@ -177,8 +179,10 @@ class ContigScanner:
         )
         return (temp_output_path, status_message, interrogated_bases_count)
 
+
 def run_scan(scanner: ContigScanner, contig_name):
     return scanner.scan_contig(contig_name)
+
 
 def aggregate_partial_results(temp_dir, final_output_path):
     logger.info("\nAll contigs processed. Merging results...")

@@ -9,47 +9,47 @@ logger = logging.getLogger(__name__)
 
 
 class IndelFilters:
-
+    # ========================================================================
+    # SECTION 1: CORE LOGIC (STATIC METHODS FOR DENOMINATOR)
+    # These methods are called from the scanner and operate on raw positions.
+    # ========================================================================
     @staticmethod
     def check_if_in_str(position: int, str_classifier: STRClassifier) -> bool:
-        """Checks if a genomic position is within a classified STR."""
+        """Checks if a genomic position is within a known STR region."""
         return str_classifier.is_in_str(position)
 
     @staticmethod
-    def check_if_homopolymer_context(ref_seq: str, position: int) -> bool:
+    def check_if_homopolymer_context(
+        ref_seq: str, position: int, min_hp_length: int
+    ) -> bool:
         """
-        Checks if a genomic position is in or adjacent to a homopolymer context.
-        This reuses the HomopolymerClassifier logic for a single source of truth.
+        Wrapper that calls the unified logic in HomopolymerClassifier for a position-based check.
         """
-        return HomopolymerClassifier.is_position_in_homopolymer_context(ref_seq, position)
+        return HomopolymerClassifier.is_position_in_homopolymer_context(
+            ref_seq, position, min_hp_length
+        )
 
+    # ========================================================================
+    # SECTION 2: INDEL-OBJECT FILTERS (WRAPPERS FOR PROCESSOR)
+    # These methods operate on Indel objects for the 'process' stage.
+    # ========================================================================
     @staticmethod
-    def _is_in_str(indel: Indel, **kwargs) -> None:
+    def _is_in_str(indel: Indel, str_classifier: STRClassifier, **kwargs) -> None:
         if indel.in_STR:
             indel.filter_reason.append("is_in_str")
 
     @staticmethod
-    def _is_adjacent_to_homopolymer(indel: Indel, **kwargs) -> None:
-        if HomopolymerClassifier(indel).is_adjacent_to_homopolymer():
-            indel.filter_reason.append("is_adjacent_to_homopolymer")
-
-    @staticmethod
-    def _is_homopolymer(indel: Indel, **kwargs) -> None:
-        if HomopolymerClassifier(indel).is_homopolymer():
-            indel.filter_reason.append("is_homopolymer")
-
-    @staticmethod
-    def _poor_mapping_quality(indel: Indel, min_mapq: int = 30, **kwargs) -> None:
-        if indel.map_quality <= min_mapq:
-            indel.filter_reason.append("poor_mapping_quality")
+    def _is_homopolymer_or_adjacent(indel: Indel, **kwargs) -> None:
+        classifier = HomopolymerClassifier(indel)
+        if classifier.should_filter_indel():
+            indel.filter_reason.append("is_homopolymer_context")
 
     @staticmethod
     def _similar_indels_in_other_reads(
         indel: Indel, location_map: DefaultDict, **kwargs
     ) -> None:
-        """Tags indels that have identical counterparts in other reads."""
         key = (indel.ref_position, indel.type, indel.length)
-
+        # We check for > 1 because the current indel is already in the map
         if location_map.get(key, 0) > 1:
             indel.filter_reason.append("similar_indels_in_other_reads")
 
@@ -57,29 +57,33 @@ class IndelFilters:
     def _low_minimum_indel_quality(
         indel: Indel, min_quality: int = 93, **kwargs
     ) -> None:
-        if indel.type != INDEL_TYPE.INSERTION:
+        if indel.type != INDEL_TYPE.INSERTION or not indel.indel_quality:
             return
         if min(indel.indel_quality) < min_quality:
             indel.filter_reason.append("low_minimum_indel_quality")
 
     @staticmethod
-    def _low_minimum_flanking_quality(
-        indel: Indel, min_flank_quality: int = 93, **kwargs
-    ) -> None:
-        if (
-            min(indel.prefix_quality) < min_flank_quality
-            or min(indel.suffix_quality) < min_flank_quality
-        ):
-            indel.filter_reason.append("low_minimum_flanking_quality")
-
-    @staticmethod
     def _low_singlebase_flanking_quality(
         indel: Indel, min_flank_quality: int = 93, **kwargs
     ) -> None:
-        if (int(indel.prefix_quality[-1]) < min_flank_quality) or (
-            int(indel.suffix_quality[0]) < min_flank_quality
+        if not indel.prefix_quality or not indel.suffix_quality:
+            return
+        if (
+            int(indel.prefix_quality[-1]) < min_flank_quality
+            or int(indel.suffix_quality[0]) < min_flank_quality
         ):
             indel.filter_reason.append("low_singlebase_flanking_quality")
+
+    # ========================================================================
+    # SECTION 3: APPLY FUNCTION (UNCHANGED)
+    # ========================================================================
+    _all_filters: Dict[str, Callable] = {
+        "is_in_str": _is_in_str,
+        "is_homopolymer_context": _is_homopolymer_or_adjacent,
+        "similar_indels_in_other_reads": _similar_indels_in_other_reads,
+        "low_minimum_indel_quality": _low_minimum_indel_quality,
+        "low_singlebase_flanking_quality": _low_singlebase_flanking_quality,
+    }
 
     @staticmethod
     def apply(
@@ -88,8 +92,8 @@ class IndelFilters:
         for config in active_filters:
             filter_name = config.get("name")
             params = config.get("params", {})
-            if filter_name in IndelFilters_all_filters:
-                filter_func = IndelFilters_all_filters[filter_name]
+            if filter_name in IndelFilters._all_filters:
+                filter_func = IndelFilters._all_filters[filter_name]
                 try:
                     filter_func(indel, **params, **context)
                 except TypeError as e:
@@ -98,15 +102,3 @@ class IndelFilters:
                     )
             else:
                 logger.warning(f"Filter '{filter_name}' not found. Skipping.")
-
-
-IndelFilters_all_filters: Dict[str, Callable] = {
-    "is_in_str": IndelFilters._is_in_str,
-    "is_adjacent_to_homopolymer": IndelFilters._is_adjacent_to_homopolymer,
-    "is_homopolymer": IndelFilters._is_homopolymer,
-    "poor_mapping_quality": IndelFilters._poor_mapping_quality,
-    "similar_indels_in_other_reads": IndelFilters._similar_indels_in_other_reads,
-    "low_minimum_indel_quality": IndelFilters._low_minimum_indel_quality,
-    "low_minimum_flanking_quality": IndelFilters._low_minimum_flanking_quality,
-    "low_singlebase_flanking_quality": IndelFilters._low_singlebase_flanking_quality,
-}
