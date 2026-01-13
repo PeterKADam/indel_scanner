@@ -1,28 +1,17 @@
-# indel_scanner/config.yaml
-
-# ==================================
-# SCANNER CONFIGURATION (for 'scan' command)
-# ==================================
-scan:
-  # --- Analysis Parameters ---
+# ==========================================================
+# Parameters for the SCANNER stage (scanner.py)
+# ==========================================================
+scanner_params:
   min_indel_size: 1
-  min_mapping_quality: 20
+  min_map_quality: 30
+  min_base_quality: 20
+  min_flank_quality: 93
+  min_homopolymer_size: 3 # Used by the scanner for the denominator
 
-  # --- Performance Parameters ---
-  # Number of parallel processes to use. 'null' means use all available CPU cores.
-  num_processes: 30
-  preload_contigs: true 
-  write_buffer_size: 100
-
-# ==================================
-# PROCESSOR CONFIGURATION (for 'process' command - currently empty)
-# ==================================
-process:
-  # Example placeholders for future processing logic:
-  # min_read_count: 5
-  # min_vaf_threshold: 0.05
-  # pass_filter: true
-  output_format: tsv
-  min_indel_quality: 93
-  min_flanking_quality: 93
-  min_mapq: 60
+# ==========================================================
+# Parameters for the PROCESSOR stage (processor.py)
+# ==========================================================
+processor_params:
+  min_homopolymer_size: 3 # Used for filtering indel objects
+  min_quality: 93
+  min_flank_quality: 93
