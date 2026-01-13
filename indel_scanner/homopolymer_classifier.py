@@ -50,7 +50,6 @@ class HomopolymerClassifier:
             )
             return True
 
-        # Build the full context and compute the indel interval (inclusive)
         full_seq = self.indel_obj.sequencecontext()
         indel_start = len(self.indel_obj.prefix_context)
         indel_end = indel_start + len(self.indel_obj.indel_content) - 1
@@ -85,18 +84,15 @@ class HomopolymerClassifier:
             if seq[i] == cur_char:
                 cur_len += 1
             else:
-                # Finish the previous run
                 if cur_len >= min_len:
                     run_start, run_end = cur_start, cur_start + cur_len - 1
-                    # Check for intersection between the run and the target interval
                     if not (run_end < start or run_start > end):
                         return True
-                # Start a new run
+
                 cur_char = seq[i]
                 cur_start = i
                 cur_len = 1
 
-        # Check the very last run in the sequence
         if cur_len >= min_len:
             run_start, run_end = cur_start, cur_start + cur_len - 1
             if not (run_end < start or run_start > end):
@@ -124,9 +120,4 @@ class HomopolymerClassifier:
         return False
 
     def should_filter_indel(self) -> bool:
-        """
-        Return **True** if the indel must be removed because:
-        • it participates in a homopolymer run (overlap), **or**
-        • it sits directly next to a homopolymer of length ≥ min_len.
-        """
         return self.is_adjacent_to_homopolymer() or self.is_homopolymer()

@@ -15,7 +15,6 @@ class IndelFilters:
     # ========================================================================
     @staticmethod
     def check_if_in_str(position: int, str_classifier: STRClassifier) -> bool:
-        """Checks if a genomic position is within a known STR region."""
         return str_classifier.is_in_str(position)
 
     @staticmethod
@@ -23,7 +22,8 @@ class IndelFilters:
         ref_seq: str, position: int, min_hp_length: int
     ) -> bool:
         """
-        Wrapper that calls the unified logic in HomopolymerClassifier for a position-based check.
+        Checks if a genomic position is in or adjacent to a homopolymer context.
+        This uses the HomopolymerClassifier logic
         """
         return HomopolymerClassifier.is_position_in_homopolymer_context(
             ref_seq, position, min_hp_length

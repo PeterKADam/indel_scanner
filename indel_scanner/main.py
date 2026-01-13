@@ -1,8 +1,4 @@
-# indel_scanner/main.py
-import argparse
 import logging
-import shutil
-import subprocess
 import csv
 import sys
 from pathlib import Path
@@ -18,31 +14,26 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    """Main workflow orchestrator."""
+
     setup_logging()
     config = Config.load()
 
     if isinstance(config, (ScannerConfig, ProcessorConfig)):
-        # --- 1. SCANNING STAGE ---
-        # This stage is run for 'scan' and for 'scan --process'
-        # logger.info(f"Starting SCANNING stage with {config.args.workers} workers...")
+
+        logger.info(f"Starting SCANNING stage with {config.args.workers} workers...")
         scanner_output_path, total_interrogated_bases = parallel_scan(config)
         logger.info(
             f"SCANNING stage complete. Total L_interrogated (denominator) = {total_interrogated_bases}"
         )
 
-        # --- 2. PROCESSING STAGE (Conditional) ---
+
         if config.args.command == "process" or config.args.process:
             logger.info("Starting PROCESSING stage...")
 
-            # The processor needs a different config context, so we create it
-            # ensuring input/output paths are correctly set.
             processor_config_data = config.yaml
 
-            # The processor's input is the scanner's output
             config.args.input = scanner_output_path
 
-            # Create a dedicated output directory for the processor
             processor_output_dir = config.output_path / "processed"
             config.args.output = processor_output_dir
 
@@ -51,12 +42,10 @@ def main():
 
             logger.info("PROCESSING stage complete.")
 
-            # --- 3. FINAL CALCULATION ---
-            logger.info("Calculating final mutation frequency...")
+            logger.info("Calculating mutation frequency...")
             passed_indels_path = processor_config.passed_indels_path
             n_indels = 0
             try:
-                # Count the number of rows in the final output file from the processor
                 passed_df = pl.read_csv(passed_indels_path, separator="\t")
                 n_indels = len(passed_df)
             except (FileNotFoundError, pl.exceptions.NoDataError):
@@ -75,7 +64,6 @@ def main():
                     "Total interrogated bases is zero. Cannot calculate frequency."
                 )
 
-            # --- 4. FINAL REPORTING ---
             logger.info(" FINAL RESULTS")
             logger.info(f"Final high-confidence indels (N_indels): {n_indels}")
             logger.info(
@@ -83,7 +71,6 @@ def main():
             )
             logger.info(f"De Novo Mutation Frequency: {mutation_frequency_str}")
 
-            # Write machine-readable output file
             report_path = config.output_path / "final_mutation_frequency.tsv"
             try:
                 with open(report_path, "w", newline="") as f:

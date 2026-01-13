@@ -7,7 +7,7 @@ from indel_scanner.configurator import Config
 
 class STRClassifier:
     """
-    Efficiently classifies genomic positions as being inside or outside a
+    Classifies genomic positions as being inside or outside a
     Short Tandem Repeat (STR) region using binary search.
 
     This class is optimized for scenarios where the repeat regions are pre-sorted,
@@ -22,16 +22,14 @@ class STRClassifier:
             repeat_regions: A list of (start, end) tuples, sorted by start position.
         """
         self.config = config
-        self.contig = contig  # beautiful naming scheme right here m8
+        self.contig = contig  # beautiful naming scheme right there m8
 
         repeat_regions = self._read_repeat_regions(contig)
 
         if not repeat_regions:
-            # Handle case with no repeat regions
             self.starts = ()
             self.ends = ()
         else:
-            # Separate starts and ends for efficient lookup
             self.starts, self.ends = zip(*repeat_regions)
 
         self.num_regions = len(self.starts)
@@ -71,11 +69,10 @@ class STRClassifier:
                     # Split the motif info at the '(' and ')' to get the repeat number and sequence
                     _, motif_sequence = motif_info.split("(")
                     motif_sequence = motif_sequence.strip(")")
-                    # The number of repeats (e.g., 4)
 
                     # Ensure the motif is not a homopolymer
-                    if len(set(motif_sequence)) == 1:
-                        continue
+                    # if len(set(motif_sequence)) == 1:
+                    #    continue
 
                     repeat_regions.append((start, end))
 
@@ -84,7 +81,6 @@ class STRClassifier:
     def is_in_str(self, position: int) -> bool:
         """
         Checks if a given genomic position falls within any STR region using binary search.
-        This operation is very fast (O(log N)).
 
         Args:
             position: The genomic position to check.

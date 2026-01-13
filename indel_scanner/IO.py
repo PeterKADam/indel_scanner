@@ -69,7 +69,6 @@ def write_records_to_tsv(
             The total number of records written.
     """
     if sort_key:
-        # Sorting requires consuming the entire iterable into a list.
         logger.debug(f"Sorting records for {output_path.name}...")
         records_to_write = sorted(records, key=sort_key)
     else:

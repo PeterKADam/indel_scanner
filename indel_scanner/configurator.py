@@ -40,7 +40,6 @@ class ScannerConfig(BaseConfig):
         self._initialize_mode_specific_attributes()
 
     def _setup_output(self) -> Tuple[Path, Path]:
-        """Performs critical directory setup and cleanup for the scanner."""
         output_path = self.output_path
         self.temp_dir = output_path / "temp_indel_parts"
         try:
@@ -61,7 +60,6 @@ class ScannerConfig(BaseConfig):
         return output_path, self.temp_dir
 
     def _initialize_mode_specific_attributes(self):
-        """Sets scanner-specific fields and executes directory setup."""
         logger.info("Configuration Mode: Scanner")
         self.num_processes: int = self.yaml.get("num_processes", 4)
         self.min_indel_size: int = self.yaml.get("min_indel_size", 1)
@@ -79,7 +77,6 @@ class ProcessorConfig(BaseConfig):
     def __init__(self, args: argparse.Namespace, config_data: dict):
         super().__init__(args, config_data)
         self._initialize_mode_specific_attributes()
-        # Define the single output path for all passed indels
         self.passed_indels_path: Path = self.output_path / "final_passed_indels.tsv"
 
     def _setup_output(self) -> Path:
@@ -131,7 +128,6 @@ class Config:
         subparsers = parser.add_subparsers(
             dest="command", required=True, help="Available commands"
         )
-        # --- Scanner ---
         scan_parser = subparsers.add_parser("scan", help="Scan a BAM file for indels.")
         scan_parser.add_argument(
             "-b", "--bam", required=True, help="Input BAM file (must be indexed)."
@@ -159,7 +155,6 @@ class Config:
             action="store_true",
             help="Whether to process the output after scanning.",
         )
-        # --- Processor ---
         process_parser = subparsers.add_parser(
             "process", help="Process the output file from the scanner."
         )

@@ -7,9 +7,6 @@ from typing import List, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# --- Core Data Definitions ---
-
-
 class INDEL_TYPE(StrEnum):
     INSERTION = "ins"
     DELETION = "del"
@@ -40,7 +37,6 @@ class Indel(ABC):
     An abstract factory class representing a generic Insertion or Deletion.
     """
 
-    # Core attributes
     contig: str
     ref_position: int
     length: int
@@ -51,7 +47,6 @@ class Indel(ABC):
     in_STR: bool
     map_quality: int
 
-    # Attributes populated from BAM file
     type: INDEL_TYPE
     filter_reason: List[str] = field(default_factory=list)
 
@@ -115,8 +110,7 @@ class Indel(ABC):
     @abstractmethod
     def to_processor_dict(self) -> Dict[str, Any]:
         """
-        Converts the object's data into a dictionary.
-        This is the primary mechanism for converting back to a Polars DataFrame.
+        Converts the object's data into a dictionary for converting back to a Polars DataFrame.
         """
         raise NotImplementedError
 
@@ -171,7 +165,6 @@ class Deletion(Indel):
 class IndelTsvFormatter:
     """
     Handles formatting of Indel objects into string-based TSV rows.
-    As a utility class with stateless methods, all functions are static.
     """
 
     @staticmethod
@@ -191,16 +184,14 @@ class IndelTsvFormatter:
             indel.read_name,
             str(indel.in_STR),
             ",".join(indel.filter_reason) if indel.filter_reason else "NA",
-            str(indel.map_quality),  # Assuming filter_reason should be a string
+            str(indel.map_quality),
         ]
 
     @staticmethod
     def format_processor_row(indel: Indel) -> List[str]:
         """
-        Generates a TSV row for the 'processor' output format, handling both
-        Insertion and Deletion types.
+        Generates a TSV row for the 'processor' output format
         """
-        # Call the other static methods using the class name
         base_row = IndelTsvFormatter.format_scanner_row(indel)
 
         if isinstance(indel, Insertion):

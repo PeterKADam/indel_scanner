@@ -1,4 +1,4 @@
-# indel_scanner/parallel.py
+
 from functools import partial
 from pathlib import Path
 import pysam
