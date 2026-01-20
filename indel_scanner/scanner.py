@@ -1,6 +1,6 @@
 # indel_scanner/scanner.py
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 import pysam
 import pyfastx
 import time

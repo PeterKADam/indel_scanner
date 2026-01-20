@@ -140,11 +140,11 @@ class PipelineConfig:
                 logger.info(
                     f"Found existing temporary directory at {self.temp_dir}. Cleaning it before use."
                 )
-                shutil.rmtree(self.temp_dir)
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
             self.temp_dir.mkdir(parents=True, exist_ok=True)
             self.processor_output_dir.mkdir(parents=True, exist_ok=True)
             if self.passed_parts_dir.exists():
-                shutil.rmtree(self.passed_parts_dir)
+                shutil.rmtree(self.passed_parts_dir, ignore_errors=True)
             self.passed_parts_dir.mkdir(parents=True, exist_ok=True)
             logger.debug(
                 f"Temporary directory for partial results is ready at {self.temp_dir}"

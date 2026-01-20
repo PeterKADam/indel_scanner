@@ -22,12 +22,12 @@ class TSV_HEADERS(Enum):
         "read_name",
         "in_STR",
         "filter_reason",
-        "map_quality",
     ]
     PROCESSOR = SCANNER + [
         "prefix_quality",
         "insertion_quality",
         "suffix_quality",
+        "map_quality",
     ]
 
 
@@ -152,7 +152,7 @@ class Insertion(Indel):
             "insertion_quality": self.indel_quality,
             "suffix_quality": self.suffix_quality,
             "map_quality": self.map_quality,
-            "filter_reason": "NA",
+            "filter_reason": "",
         }
 
 
@@ -175,7 +175,7 @@ class Deletion(Indel):
             "insertion_quality": None,  # Deletions explicitly have no insertion quality
             "suffix_quality": self.suffix_quality,
             "map_quality": self.map_quality,
-            "filter_reason": "NA",
+            "filter_reason": "",
         }
 
 
@@ -200,8 +200,7 @@ class IndelTsvFormatter:
             indel.sequencecontext_brackets(),
             indel.read_name,
             str(indel.in_STR),
-            "NA",
-            str(indel.map_quality),
+            "",
         ]
 
     @staticmethod

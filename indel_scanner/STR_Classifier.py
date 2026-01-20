@@ -70,10 +70,6 @@ class STRClassifier:
                     _, motif_sequence = motif_info.split("(")
                     motif_sequence = motif_sequence.strip(")")
 
-                    # Ensure the motif is not a homopolymer
-                    # if len(set(motif_sequence)) == 1:
-                    #    continue
-
                     repeat_regions.append((start, end))
 
         return repeat_regions

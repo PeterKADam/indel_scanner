@@ -33,12 +33,12 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
         pl.col("sequence_context_brackets").alias("[sequence]_context"),
         pl.col("read_name"),
         pl.col("in_STR"),
+        pl.col("filter_reason").alias("filter_reason"),
         format_list_col("prefix_quality"),
         format_list_col(
             "insertion_quality"
         ),  # Will be null for deletions, handled by fill_null
         format_list_col("suffix_quality"),
-        format_list_col("filter_reason").alias("filter_reason"),
         pl.col("map_quality"),
     )
 
@@ -116,8 +116,7 @@ def candidate_to_scanner_row(record: IndelRecord) -> List[str]:
         f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
         record.read_name,
         str(record.in_STR),
-        "NA",
-        str(record.map_quality),
+        "",
     ]
 
 
@@ -133,11 +132,11 @@ def passed_to_processor_row(record: IndelRecord) -> List[str]:
         f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
         record.read_name,
         str(record.in_STR),
-        "NA",
-        str(record.map_quality),
+        "",
         format_list(record.prefix_quality),
         format_list(record.indel_quality),
         format_list(record.suffix_quality),
+        str(record.map_quality),
     ]
 
 
@@ -204,4 +203,7 @@ def iter_tsv_rows_in_batches(
 
 def cleanup_temp_dir(temp_dir):
     logger.debug(f"Cleaning up temporary files in {temp_dir}")
-    shutil.rmtree(temp_dir)
+    try:
+        shutil.rmtree(temp_dir)
+    except FileNotFoundError:
+        pass

@@ -48,9 +48,10 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     with pysam.AlignmentFile(str(scannerconfig.bamfile), "rb") as samfile:
         contigs = list(samfile.header.references)
         contig_lengths = list(samfile.header.lengths)
-    if scannerconfig.contigs:
+    contig_filter = getattr(scannerconfig, "contigs", None)
+    if isinstance(contig_filter, (list, tuple, set)) and contig_filter:
         contig_lookup = dict(zip(contigs, contig_lengths))
-        contigs = [c for c in contigs if c in scannerconfig.contigs]
+        contigs = [c for c in contigs if c in contig_filter]
         contig_lengths = [contig_lookup[c] for c in contigs]
     logger.info(f"Found {len(contigs)} contigs.")
     if scannerconfig.sampling_strategy == "largest_contig":
