@@ -60,6 +60,14 @@ class IndelRecord:
     prefix_quality: Optional[List[int]] = None
     suffix_quality: Optional[List[int]] = None
 
+    def sequencecontext_brackets(self) -> str:
+        """Returns the sequence context with brackets around the indel content."""
+        return f"{self.prefix_context}[{self.indel_content}]{self.suffix_context}"
+
+    def sequencecontext(self) -> str:
+        """Returns the full sequence context without brackets."""
+        return f"{self.prefix_context}{self.indel_content}{self.suffix_context}"
+
 
 @dataclass
 class Indel(IndelRecord, ABC):
