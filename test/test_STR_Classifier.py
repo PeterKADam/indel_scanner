@@ -2,15 +2,15 @@
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open
 import pytest
-from indel_scanner.configurator import ScannerConfig
+from indel_scanner.configurator import PipelineConfig
 from indel_scanner.STR_Classifier import STRClassifier
 
 
-# A fixture to provide a mock ScannerConfig, avoiding repetition.
+# A fixture to provide a mock PipelineConfig, avoiding repetition.
 @pytest.fixture
 def mock_config(tmp_path):
-    """Provides a mock ScannerConfig pointing to a temporary directory."""
-    config = MagicMock(spec=ScannerConfig)
+    """Provides a mock PipelineConfig pointing to a temporary directory."""
+    config = MagicMock(spec=PipelineConfig)
     config.str_directory = tmp_path  # Use pytest's tmp_path for a realistic Path object
     return config
 

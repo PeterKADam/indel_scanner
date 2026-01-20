@@ -6,14 +6,24 @@ from pathlib import Path
 # Mock the application's config object
 @pytest.fixture
 def mock_scanner_config():
-    """Provides a mock ScannerConfig object for tests."""
+    """Provides a mock PipelineConfig object for tests."""
     config = Mock()
     config.bamfile = Path("/fake/test.bam")
     config.fastafile = Path("/fake/test.fasta")
     config.temp_dir = Path("/fake/temp")
     config.output_path = Path("/fake/output.tsv")
     config.min_indel_size = 3  # Set a specific value for predictable tests
-    config.buffer_size = 1000
+    config.write_buffer_size = 1000
+    config.min_flank_quality = 93
+    config.min_base_quality = 20
+    config.indel_bins = [
+        {"label": "indel_1bp", "min": 1, "max": 1},
+        {"label": "indel_2_3bp", "min": 2, "max": 3},
+        {"label": "indel_4_10bp", "min": 4, "max": 10},
+    ]
+    config.sampling_strategy = "largest_contig"
+    config.sampling_bases = 1000000
+    config.snp_label = "snp"
     return config
 
 @pytest.fixture

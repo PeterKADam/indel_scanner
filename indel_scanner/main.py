@@ -1,93 +1,73 @@
 import logging
-import csv
-import sys
-from pathlib import Path
-from multiprocessing import Pool, cpu_count
-import pysam
-import polars as pl
-from indel_scanner.configurator import Config, ScannerConfig, ProcessorConfig
-from indel_scanner.parallel import parallel_scan
-from indel_scanner.processor import run_processor
+from indel_scanner.configurator import Config
+from indel_scanner.parallel import parallel_pipeline
+from indel_scanner.reporting import (
+    write_mutation_frequency_report,
+    write_per_type_mutation_report,
+)
 from indel_scanner.log import setup_logging
 
 logger = logging.getLogger(__name__)
 
 
 def main():
-
     setup_logging()
     config = Config.load()
+    logger.info(f"Starting pipeline with {config.num_processes} workers...")
+    passed_indels_path, total_interrogated_bases, stats = parallel_pipeline(config)
+    logger.info(
+        "Pipeline complete. Total L_interrogated (denominator) = "
+        f"{total_interrogated_bases}"
+    )
+    logger.info(
+        "Pipeline stats: reads=%s candidates=%s passed=%s",
+        stats["reads"],
+        stats["candidates"],
+        stats["passed"],
+    )
 
-    if isinstance(config, (ScannerConfig, ProcessorConfig)):
+    logger.info("Calculating mutation frequency...")
+    write_mutation_frequency_report(
+        passed_indels_path=passed_indels_path,
+        total_interrogated_bases=total_interrogated_bases,
+        output_dir=config.output_path,
+        report_filename=config.report_filename,
+    )
 
-        logger.info(f"Starting SCANNING stage with {config.args.workers} workers...")
-        scanner_output_path, total_interrogated_bases = parallel_scan(config)
-        logger.info(
-            f"SCANNING stage complete. Total L_interrogated (denominator) = {total_interrogated_bases}"
-        )
+    sampling_total = stats["sampling_bases_total"]
+    callable_bases_by_type: dict[str, float] = {}
+    for mutation_type, passable_count in stats["sampling_passable_by_type"].items():
+        if sampling_total > 0:
+            callable_bases_by_type[mutation_type] = (
+                passable_count / sampling_total
+            ) * stats["total_aligned_bases"]
+        else:
+            callable_bases_by_type[mutation_type] = 0.0
 
+    type_counts = dict(stats["type_counts"])
+    type_counts.setdefault(config.snp_label, 0)
+    if config.snp_label not in callable_bases_by_type:
+        callable_bases_by_type[config.snp_label] = 0.0
+    for bin_cfg in config.indel_bins:
+        ins_label = f"ins_{bin_cfg['label']}"
+        del_label = f"del_{bin_cfg['label']}"
+        type_counts.setdefault(ins_label, 0)
+        type_counts.setdefault(del_label, 0)
+        callable_bases_by_type.setdefault(ins_label, 0.0)
+        callable_bases_by_type.setdefault(del_label, 0.0)
 
-        if config.args.command == "process" or config.args.process:
-            logger.info("Starting PROCESSING stage...")
+    logger.info(
+        "Sampling total=%s; callable_by_type=%s",
+        sampling_total,
+        callable_bases_by_type,
+    )
 
-            processor_config_data = config.yaml
-
-            config.args.input = scanner_output_path
-
-            processor_output_dir = config.output_path / "processed"
-            config.args.output = processor_output_dir
-
-            processor_config = ProcessorConfig(config.args, processor_config_data)
-            run_processor(processor_config)
-
-            logger.info("PROCESSING stage complete.")
-
-            logger.info("Calculating mutation frequency...")
-            passed_indels_path = processor_config.passed_indels_path
-            n_indels = 0
-            try:
-                passed_df = pl.read_csv(passed_indels_path, separator="\t")
-                n_indels = len(passed_df)
-            except (FileNotFoundError, pl.exceptions.NoDataError):
-                logger.warning(
-                    f"{passed_indels_path} not found or is empty. Assuming 0 passed indels."
-                )
-                n_indels = 0
-
-            mutation_frequency = 0.0
-            mutation_frequency_str = "NA"
-            if total_interrogated_bases > 0:
-                mutation_frequency = n_indels / total_interrogated_bases
-                mutation_frequency_str = f"{mutation_frequency:.10e}"
-            else:
-                logger.warning(
-                    "Total interrogated bases is zero. Cannot calculate frequency."
-                )
-
-            logger.info(" FINAL RESULTS")
-            logger.info(f"Final high-confidence indels (N_indels): {n_indels}")
-            logger.info(
-                f"Total interrogated bases (L_interrogated): {total_interrogated_bases}"
-            )
-            logger.info(f"De Novo Mutation Frequency: {mutation_frequency_str}")
-
-            report_path = config.output_path / "final_mutation_frequency.tsv"
-            try:
-                with open(report_path, "w", newline="") as f:
-                    writer = csv.writer(f, delimiter="\t")
-                    writer.writerow(
-                        ["N_indels", "L_interrogated", "Mutation_Frequency"]
-                    )
-                    writer.writerow(
-                        [n_indels, total_interrogated_bases, mutation_frequency_str]
-                    )
-                logger.info(f"Final results written to {report_path}")
-            except Exception as e:
-                logger.error(f"Failed to write final report file: {e}")
-
-    else:
-        logger.error(f"Unknown config: {config}")
-        sys.exit(1)
+    write_per_type_mutation_report(
+        type_counts=type_counts,
+        callable_bases_by_type=callable_bases_by_type,
+        output_dir=config.output_path,
+        report_filename=config.per_type_report_filename,
+    )
 
 
 if __name__ == "__main__":

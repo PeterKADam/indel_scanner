@@ -1,122 +1,157 @@
-# indel_scanner/configurator.py
 import argparse
-import sys
-import shutil
-from pathlib import Path
-from typing import Tuple, Union
-import yaml
 import logging
+import shutil
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_SCANNER: Dict[str, Any] = {
+    "num_processes": 4,
+    "min_indel_size": 1,
+    "preload_contigs": True,
+    "min_map_quality": 30,
+    "min_base_quality": 20,
+    "min_flank_quality": 93,
+    "min_homopolymer_len": 3,
+    "temp_dir_name": "temp_indel_parts",
+    "output_filename": "indel_scanner_results.tsv",
+}
 
-class BaseConfig:
+DEFAULT_PROCESSOR: Dict[str, Any] = {
+    "output_subdir": "processed",
+    "passed_indels_filename": "final_passed_indels.tsv",
+    "filters": [
+        {"name": "is_in_str"},
+        {"name": "is_homopolymer_context", "params": {"min_homopolymer_len": 3}},
+        {"name": "similar_indels_in_other_reads"},
+        {"name": "low_minimum_indel_quality", "params": {"min_quality": 93}},
+        {
+            "name": "low_singlebase_flanking_quality",
+            "params": {"min_flank_quality": 93},
+        },
+    ],
+}
+
+DEFAULT_REPORTING: Dict[str, Any] = {
+    "mutation_frequency_filename": "final_mutation_frequency.tsv",
+    "per_type_frequency_filename": "per_type_mutation_frequency.tsv",
+}
+
+DEFAULT_IO: Dict[str, Any] = {
+    "write_buffer_size": 1000,
+    "read_batch_size": 10000,
+}
+
+DEFAULT_PIPELINE: Dict[str, Any] = {
+    "in_memory": False,
+    "max_in_memory_records": 500000,
+    "passed_parts_dir_name": "temp_passed_indel_parts",
+    "sampling_bases": 1000000,
+    "sampling_strategy": "largest_contig",
+    "indel_bins": [
+        {"label": "indel_1bp", "min": 1, "max": 1},
+        {"label": "indel_2_3bp", "min": 2, "max": 3},
+        {"label": "indel_4_10bp", "min": 4, "max": 10},
+    ],
+    "snp_label": "snp",
+}
+
+
+class PipelineConfig:
     def __init__(self, args: argparse.Namespace, config_data: dict) -> None:
         self.args = args
         self.yaml = config_data
-        self.mode = self.args.command
+
         self.bamfile: Path = Path(self.args.bam)
         self.fastafile: Path = Path(self.args.fasta)
-        self.output_path: Path = Path(self.args.output)
-        if self.mode == "process":
-            self.input_file: Path = Path(self.args.input)
+        self.base_output_path: Path = Path(self.args.output)
+        run_stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        self.run_id = f"{run_stamp}_{self.bamfile.stem}"
+        self.output_path: Path = self.base_output_path / self.run_id
+        self.str_directory: Path = Path(self.args.strdir)
 
+        self.scanner = {**DEFAULT_SCANNER, **(config_data.get("scanner") or {})}
+        self.processor = {**DEFAULT_PROCESSOR, **(config_data.get("processor") or {})}
+        self.reporting = {**DEFAULT_REPORTING, **(config_data.get("reporting") or {})}
+        self.io = {**DEFAULT_IO, **(config_data.get("io") or {})}
+        self.pipeline = {**DEFAULT_PIPELINE, **(config_data.get("pipeline") or {})}
 
-class ScannerConfig(BaseConfig):
-    """Configuration specific to the scanner mode."""
+        self.num_processes: int = self.scanner["num_processes"]
+        self.min_indel_size: int = self.scanner["min_indel_size"]
+        self.preload: bool = self.scanner["preload_contigs"]
+        scanner_write_buffer = (config_data.get("scanner") or {}).get("write_buffer_size")
+        if (config_data.get("io") or {}).get("write_buffer_size") is not None:
+            self.write_buffer_size = self.io["write_buffer_size"]
+        elif scanner_write_buffer is not None:
+            self.write_buffer_size = scanner_write_buffer
+        else:
+            self.write_buffer_size = self.io["write_buffer_size"]
 
-    temp_dir: Path
-    min_indel_size: int
-    preload: bool
-    buffer_size: int
-    str_directory: Path
-    min_map_quality: int
-    min_base_quality: int
-    min_flank_quality: int
-    min_homopolymer_len: int = 3
+        self.read_batch_size: int = self.io["read_batch_size"]
+        self.min_map_quality: int = self.scanner["min_map_quality"]
+        self.min_base_quality: int = self.scanner["min_base_quality"]
+        self.min_flank_quality: int = self.scanner["min_flank_quality"]
+        self.min_homopolymer_len: int = self.scanner["min_homopolymer_len"]
 
-    def __init__(self, args: argparse.Namespace, config_data: dict):
-        super().__init__(args, config_data)
-        self._initialize_mode_specific_attributes()
+        self.temp_dir = self.output_path / self.scanner["temp_dir_name"]
+        self.scan_output_path = self.output_path / self.scanner["output_filename"]
 
-    def _setup_output(self) -> Tuple[Path, Path]:
-        output_path = self.output_path
-        self.temp_dir = output_path / "temp_indel_parts"
+        self.processor_output_dir = self.output_path / self.processor["output_subdir"]
+        self.passed_indels_path = (
+            self.processor_output_dir / self.processor["passed_indels_filename"]
+        )
+        self.processor_filters = self.processor["filters"]
+
+        self.report_filename = self.reporting["mutation_frequency_filename"]
+        self.per_type_report_filename = self.reporting["per_type_frequency_filename"]
+        self.in_memory: bool = self.pipeline["in_memory"]
+        self.max_in_memory_records: int = self.pipeline["max_in_memory_records"]
+        self.passed_parts_dir = self.output_path / self.pipeline["passed_parts_dir_name"]
+        self.sampling_bases: int = self.pipeline["sampling_bases"]
+        self.sampling_strategy: str = self.pipeline["sampling_strategy"]
+        self.indel_bins = self.pipeline["indel_bins"]
+        self.snp_label: str = self.pipeline["snp_label"]
+        self.sampling_contig: str = ""
+        self.contigs = self._parse_contigs(self.args.contigs, self.scanner.get("contigs"))
+
+        self._setup_output()
+
+    def _parse_contigs(self, cli_value, yaml_value):
+        raw = cli_value if cli_value is not None else yaml_value
+        if raw is None:
+            return None
+        if isinstance(raw, list):
+            return [str(c).strip() for c in raw if str(c).strip()]
+        if isinstance(raw, str):
+            parts = [p.strip() for p in raw.split(",")]
+            return [p for p in parts if p]
+        return None
+
+    def _setup_output(self) -> None:
         try:
-            output_path.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Output directory set up at {output_path}")
+            self.output_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Output directory set up at {self.output_path}")
             if self.temp_dir.exists():
                 logger.info(
                     f"Found existing temporary directory at {self.temp_dir}. Cleaning it before use."
                 )
                 shutil.rmtree(self.temp_dir)
             self.temp_dir.mkdir(parents=True, exist_ok=True)
+            self.processor_output_dir.mkdir(parents=True, exist_ok=True)
+            if self.passed_parts_dir.exists():
+                shutil.rmtree(self.passed_parts_dir)
+            self.passed_parts_dir.mkdir(parents=True, exist_ok=True)
             logger.debug(
                 f"Temporary directory for partial results is ready at {self.temp_dir}"
             )
         except Exception as e:
             logger.error(f"Error setting up output directories: {e}")
             sys.exit(1)
-        return output_path, self.temp_dir
-
-    def _initialize_mode_specific_attributes(self):
-        logger.info("Configuration Mode: Scanner")
-        self.num_processes: int = self.yaml.get("num_processes", 4)
-        self.min_indel_size: int = self.yaml.get("min_indel_size", 1)
-        self.preload: bool = self.yaml.get("preload_contigs", True)
-        self.buffer_size: int = self.yaml.get("write_buffer_size", 100)
-        self.min_map_quality: int = self.yaml.get("min_map_quality", 30)
-        self.min_base_quality: int = self.yaml.get("min_base_quality", 20)
-        self.min_flank_quality: int = self.yaml.get("min_flank_quality", 93)
-        self.str_directory: Path = Path(self.args.strdir)  # type: ignore
-        self._setup_output()
-        logger.info("Scanner output directories configured and cleaned.")
-
-
-class ProcessorConfig(BaseConfig):
-    def __init__(self, args: argparse.Namespace, config_data: dict):
-        super().__init__(args, config_data)
-        self._initialize_mode_specific_attributes()
-        self.passed_indels_path: Path = self.output_path / "final_passed_indels.tsv"
-
-    def _setup_output(self) -> Path:
-        if not self.input_file.is_file():
-            logger.error(f"Input file not found at: {self.input_file}")
-            logger.error(
-                "The 'process' command requires a valid input file generated by the 'scan' command."
-            )
-            sys.exit(1)
-        try:
-            self.output_path.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            logger.error(
-                f"Could not create output directory at {self.output_path}: {e}"
-            )
-            sys.exit(1)
-        return self.output_path
-
-    def _initialize_mode_specific_attributes(self):
-        logger.info("Configuration Mode: Processor")
-        self._setup_output()
-        self.output_format = self.yaml.get("output_format", "tsv")
-        logger.info(
-            f"Processor output configured (Format: {self.output_format}). No directory cleanup performed."
-        )
-
-
-class DNM_estimateConfig(BaseConfig):
-    str_directory: Path
-
-    def __init__(self, args: argparse.Namespace, config_data: dict):
-        super().__init__(args, config_data)
-        self._initialize_mode_specific_attributes()
-
-    def _initialize_mode_specific_attributes(self):
-        """Sets DNM_estimate-specific fields."""
-        logger.info("Configuration Mode: DNM_estimate")
-        self.sampling_fraction: float = self.yaml.get("sampling_fraction", 0.01)
-        self.min_homopolymer_len: int = self.yaml.get("min_homopolymer_len", 3)
-        self.str_directory: Path = Path(self.args.strdir)  # type: ignore
 
 
 class Config:
@@ -125,64 +160,36 @@ class Config:
         parser = argparse.ArgumentParser(
             description="A toolkit for scanning and processing indels from BAM files."
         )
-        subparsers = parser.add_subparsers(
-            dest="command", required=True, help="Available commands"
-        )
-        scan_parser = subparsers.add_parser("scan", help="Scan a BAM file for indels.")
-        scan_parser.add_argument(
+        parser.add_argument(
             "-b", "--bam", required=True, help="Input BAM file (must be indexed)."
         )
-        scan_parser.add_argument(
+        parser.add_argument(
             "-f",
             "--fasta",
             required=True,
             help="Reference FASTA file (must be indexed).",
         )
-        scan_parser.add_argument(
+        parser.add_argument(
             "-o", "--output", required=True, help="Path to the output directory."
         )
-        scan_parser.add_argument(
-            "-c",
-            "--config",
-            default="config.yaml",
-            help="Path to the configuration file.",
-        )
-        scan_parser.add_argument(
+        parser.add_argument(
             "-s", "--strdir", required=True, help="Directory containing STR results."
         )
-        scan_parser.add_argument(
-            "--process",
-            action="store_true",
-            help="Whether to process the output after scanning.",
-        )
-        process_parser = subparsers.add_parser(
-            "process", help="Process the output file from the scanner."
-        )
-        process_parser.add_argument(
-            "-i",
-            "--input",
-            required=True,
-            help="Input TSV file generated by the 'scan' command.",
-        )
-        process_parser.add_argument(
-            "-b", "--bam", required=True, help="Input BAM file (must be indexed)."
-        )
-        process_parser.add_argument(
-            "-f", "--fasta", required=True, help="Reference FASTA file."
-        )
-        process_parser.add_argument(
-            "-o", "--output", required=True, help="Path for the processed output file."
-        )
-        process_parser.add_argument(
+        parser.add_argument(
             "-c",
             "--config",
             default="config.yaml",
             help="Path to the configuration file.",
+        )
+        parser.add_argument(
+            "--contigs",
+            default=None,
+            help="Comma-separated list of contigs to process (default: all).",
         )
         return parser.parse_args()
 
     @staticmethod
-    def load() -> Union[ScannerConfig, ProcessorConfig]:
+    def load() -> PipelineConfig:
         args = Config._parse_args()
         config_path = Path(args.config)
         full_config = {}
@@ -198,16 +205,4 @@ class Config:
                 f"Configuration file not found at {config_path}. Using command-line args and defaults."
             )
 
-        mode_config = full_config.get(args.command, {})
-        if not mode_config and config_path.exists():
-            logger.warning(
-                f"Configuration section '{args.command}' missing or empty in {config_path}."
-            )
-
-        if args.command == "scan":
-            return ScannerConfig(args, mode_config)
-        elif args.command == "process":
-            return ProcessorConfig(args, mode_config)
-        else:
-            logger.error(f"FATAL: Unknown command '{args.command}'")
-            sys.exit(1)
+        return PipelineConfig(args, full_config)

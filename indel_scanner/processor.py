@@ -2,16 +2,16 @@
 import logging
 import sys
 from collections import defaultdict
+from pathlib import Path
 from typing import List, Tuple, Dict
-import polars as pl
 import pyfastx
 import pysam
 from pysam import AlignedSegment
 
-from .IO import write_records_with_polars
-from .configurator import ProcessorConfig
+from .IO import write_records_with_polars, iter_tsv_rows_in_batches
+from .configurator import PipelineConfig
 from .filters import IndelFilters
-from .indel import INDEL_TYPE, Indel, Insertion, Deletion
+from .indel import INDEL_TYPE, Indel, Insertion, Deletion, TSV_HEADERS
 from .utils import Cigar
 
 logger = logging.getLogger(__name__)
@@ -21,13 +21,17 @@ READ_CONSUMING_OPS = {Cigar.OP_M, Cigar.OP_I, Cigar.OP_S, Cigar.OP_EQ, Cigar.OP_
 
 
 class Processor:
-    def __init__(self, config: ProcessorConfig):
+    def __init__(self, config: PipelineConfig, input_file: Path, output_path: Path):
         self.config = config
+        self.input_file = input_file
+        self.output_path = output_path
         self.reference = None
         self.bam_handle = None
         self.indels_by_contig: Dict[str, Dict[str, List[Indel]]] = defaultdict(lambda: defaultdict(list))
         self.passed_indels: List[Indel] = []
         self.total_records_processed = 0
+        self.passed_indels_path = self.config.passed_indels_path
+        self.filter_configuration = self.config.processor_filters
 
     def __enter__(self):
         try:
@@ -43,41 +47,53 @@ class Processor:
             self.bam_handle.close()
 
     def _load_indels(self):
-        logger.info(f"Loading and filtering indels from {self.config.input_file}...")
+        logger.info(f"Loading and filtering indels from {self.input_file}...")
         try:
-            lazy_df = pl.scan_csv(self.config.input_file, separator="\t", has_header=True)
-            df = lazy_df.collect()
-            for row in df.iter_rows(named=True):
-                contig = row["contig"]
-                position = row["ref_position"]
-                length = row["length"]
-                indel_type = row["type"]
-                read_name = row["read_name"]
-                map_quality = row["map_quality"]
-                prefix, indel_seq, suffix = self._parse_sequence_context(row["[sequence]_context"])
+            for batch in iter_tsv_rows_in_batches(
+                self.input_file, self.config.read_batch_size
+            ):
+                for row in batch:
+                    if len(row) < len(TSV_HEADERS.SCANNER.value):
+                        continue
+                    contig = row[0]
+                    position = int(row[1])
+                    indel_type = row[2]
+                    length = int(row[3])
+                    sequence_context = row[4]
+                    read_name = row[5]
+                    in_str = row[6].lower() == "true"
+                    map_quality = int(row[8])
+                    prefix, indel_seq, suffix = self._parse_sequence_context(
+                        sequence_context
+                    )
 
-                indel_content = ""
-                if indel_type == INDEL_TYPE.INSERTION:
-                    indel_content = indel_seq
-                elif self.reference:
-                    # For deletions, fetch content from reference
-                    ref_end = position + length
-                    indel_content = self.reference.fetch(contig, (position, ref_end))
+                    indel_content = ""
+                    if indel_type == INDEL_TYPE.INSERTION:
+                        indel_content = indel_seq
+                    elif self.reference:
+                        ref_end = position + length
+                        indel_content = self.reference.fetch(contig, (position, ref_end))
 
-                indel_obj = Indel.create(
-                    contig=contig, ref_position=position, length=length,
-                    prefix_context=prefix, suffix_context=suffix, read_name=read_name,
-                    type=indel_type, indel_content=indel_content,
-                    in_STR=row["in_STR"], map_quality=map_quality,
-                )
-                if indel_obj:
-                    self.indels_by_contig[contig][read_name].append(indel_obj)
+                    indel_obj = Indel.create(
+                        contig=contig,
+                        ref_position=position,
+                        length=length,
+                        prefix_context=prefix,
+                        suffix_context=suffix,
+                        read_name=read_name,
+                        type=indel_type,
+                        indel_content=indel_content,
+                        in_STR=in_str,
+                        map_quality=map_quality,
+                    )
+                    if indel_obj:
+                        self.indels_by_contig[contig][read_name].append(indel_obj)
 
-        except pl.exceptions.NoDataError:
-            logger.warning(f"Input file is empty: {self.config.input_file}")
+        except FileNotFoundError:
+            logger.warning(f"Input file is empty or missing: {self.input_file}")
             return
         except Exception as e:
-            logger.error(f"Failed to load indels with Polars: {e}")
+            logger.error(f"Failed to load indels from TSV: {e}")
             raise
 
         num_indels = sum(len(indels) for reads in self.indels_by_contig.values() for indels in reads.values())
@@ -88,15 +104,6 @@ class Processor:
             raise IOError("BAM file handle is not open.")
 
         logger.info("Streaming BAM file and applying filters...")
-        filter_configuration = [
-            {"name": "is_in_str"},
-            {"name": "is_homopolymer"},
-            {"name": "is_adjacent_to_homopolymer"},
-            {"name": "similar_indels_in_other_reads"},
-            {"name": "low_minimum_indel_quality", "params": {"min_quality": 93}},
-            {"name": "low_singlebase_flanking_quality", "params": {"min_flank_quality": 93}},
-        ]
-
         for contig, reads_on_contig in self.indels_by_contig.items():
             logger.info(f"Processing contig: {contig}...")
 
@@ -125,8 +132,8 @@ class Processor:
 
             # 3. Apply all filters
             for indel_obj in indels_for_this_contig:
-                IndelFilters.apply(filter_configuration, indel_obj, **filter_context)
-                if not indel_obj.filter_reason: # No filters were triggered
+                IndelFilters.apply(self.filter_configuration, indel_obj, **filter_context)
+                if not indel_obj.is_filtered(): # No filters were triggered
                     self.passed_indels.append(indel_obj)
 
         self.total_records_processed = len(self.passed_indels)
@@ -190,14 +197,17 @@ class Processor:
             return "", "", ""
 
     def write_output(self):
-        if self.config.passed_indels_path and self.passed_indels:
-            logger.info(f"Writing {len(self.passed_indels)} passed indels to {self.config.passed_indels_path}...")
-            write_records_with_polars(self.passed_indels, self.config.passed_indels_path)
+        if self.passed_indels_path and self.passed_indels:
+            logger.info(f"Writing {len(self.passed_indels)} passed indels to {self.passed_indels_path}...")
+            write_records_with_polars(self.passed_indels, self.passed_indels_path)
 
-def run_processor(config: ProcessorConfig):
+def run_processor(config: PipelineConfig, input_file: Path, output_path: Path):
     logger.info("Starting indel processing task...")
+    if not input_file.is_file():
+        logger.error(f"Input file not found at: {input_file}")
+        sys.exit(1)
     try:
-        with Processor(config) as processor:
+        with Processor(config, input_file, output_path) as processor:
             processor.process()
             processor.write_output()
         logger.info("Indel processing finished successfully.")

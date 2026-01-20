@@ -2,7 +2,7 @@ import bisect
 from pathlib import Path
 from typing import List, Tuple
 
-from indel_scanner.configurator import Config
+from indel_scanner.configurator import PipelineConfig
 
 
 class STRClassifier:
@@ -14,7 +14,7 @@ class STRClassifier:
     but query positions arrive in an arbitrary (unsorted) order.
     """
 
-    def __init__(self, config: Config, contig: str):
+    def __init__(self, config: PipelineConfig, contig: str):
         """
         Initializes the classifier by preparing lists for binary search.
 

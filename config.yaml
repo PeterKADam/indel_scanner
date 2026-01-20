@@ -1,17 +1,52 @@
-# ==========================================================
-# Parameters for the SCANNER stage (scanner.py)
-# ==========================================================
-scanner_params:
+scanner:
+  num_processes: 4
   min_indel_size: 1
+  preload_contigs: true
   min_map_quality: 30
   min_base_quality: 20
   min_flank_quality: 93
-  min_homopolymer_size: 3 # Used by the scanner for the denominator
+  min_homopolymer_len: 3
+  temp_dir_name: temp_indel_parts
+  output_filename: indel_scanner_results.tsv
 
-# ==========================================================
-# Parameters for the PROCESSOR stage (processor.py)
-# ==========================================================
-processor_params:
-  min_homopolymer_size: 3 # Used for filtering indel objects
-  min_quality: 93
-  min_flank_quality: 93
+processor:
+  output_subdir: processed
+  passed_indels_filename: final_passed_indels.tsv
+  filters:
+    - name: is_in_str
+    - name: is_homopolymer_context
+      params:
+        min_homopolymer_len: 3
+    - name: similar_indels_in_other_reads
+    - name: low_minimum_indel_quality
+      params:
+        min_quality: 93
+    - name: low_singlebase_flanking_quality
+      params:
+        min_flank_quality: 93
+
+reporting:
+  mutation_frequency_filename: final_mutation_frequency.tsv
+  per_type_frequency_filename: per_type_mutation_frequency.tsv
+
+io:
+  write_buffer_size: 1000
+  read_batch_size: 10000
+
+pipeline:
+  in_memory: false
+  max_in_memory_records: 500000
+  passed_parts_dir_name: temp_passed_indel_parts
+  sampling_bases: 1000000
+  sampling_strategy: largest_contig
+  snp_label: snp
+  indel_bins:
+    - label: indel_1bp
+      min: 1
+      max: 1
+    - label: indel_2_3bp
+      min: 2
+      max: 3
+    - label: indel_4_10bp
+      min: 4
+      max: 10

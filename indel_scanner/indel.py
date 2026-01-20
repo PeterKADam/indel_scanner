@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum, StrEnum
+from enum import Enum, StrEnum, IntFlag
 from typing import List, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -31,12 +31,17 @@ class TSV_HEADERS(Enum):
     ]
 
 
-@dataclass
-class Indel(ABC):
-    """
-    An abstract factory class representing a generic Insertion or Deletion.
-    """
+class FilterFlag(IntFlag):
+    NONE = 0
+    IS_IN_STR = 1 << 0
+    IS_HOMOPOLYMER_CONTEXT = 1 << 1
+    SIMILAR_IN_OTHER_READS = 1 << 2
+    LOW_MINIMUM_INDEL_QUALITY = 1 << 3
+    LOW_SINGLEBASE_FLANKING_QUALITY = 1 << 4
 
+
+@dataclass
+class IndelRecord:
     contig: str
     ref_position: int
     length: int
@@ -46,9 +51,21 @@ class Indel(ABC):
     read_name: str
     in_STR: bool
     map_quality: int
-
     type: INDEL_TYPE
-    filter_reason: List[str] = field(default_factory=list)
+    filter_mask: FilterFlag = FilterFlag.NONE
+
+    def is_filtered(self) -> bool:
+        return self.filter_mask != FilterFlag.NONE
+    indel_quality: Optional[List[int]] = None
+    prefix_quality: Optional[List[int]] = None
+    suffix_quality: Optional[List[int]] = None
+
+
+@dataclass
+class Indel(IndelRecord, ABC):
+    """
+    An abstract factory class representing a generic Insertion or Deletion.
+    """
 
     @classmethod
     def create(
@@ -135,7 +152,7 @@ class Insertion(Indel):
             "insertion_quality": self.indel_quality,
             "suffix_quality": self.suffix_quality,
             "map_quality": self.map_quality,
-            "filter_reason": self.filter_reason,
+            "filter_reason": "NA",
         }
 
 
@@ -158,7 +175,7 @@ class Deletion(Indel):
             "insertion_quality": None,  # Deletions explicitly have no insertion quality
             "suffix_quality": self.suffix_quality,
             "map_quality": self.map_quality,
-            "filter_reason": self.filter_reason,
+            "filter_reason": "NA",
         }
 
 
@@ -183,7 +200,7 @@ class IndelTsvFormatter:
             indel.sequencecontext_brackets(),
             indel.read_name,
             str(indel.in_STR),
-            ",".join(indel.filter_reason) if indel.filter_reason else "NA",
+            "NA",
             str(indel.map_quality),
         ]
 

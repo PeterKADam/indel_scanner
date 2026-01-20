@@ -6,6 +6,7 @@ from indel_scanner.indel import (
     Insertion,
     Deletion,
     INDEL_TYPE,
+    FilterFlag,
 )
 
 
@@ -80,7 +81,7 @@ def insertion_instance() -> Insertion:
         read_name="read_1",
         type=INDEL_TYPE.INSERTION,
         in_STR=False,
-        filter_reason=[],
+        filter_mask=FilterFlag.NONE,
         map_quality=60,
         indel_quality=[30, 31, 32],
         prefix_quality=[25, 26, 27, 28],
@@ -101,7 +102,7 @@ def deletion_instance() -> Deletion:
         read_name="read_2",
         type=INDEL_TYPE.DELETION,
         in_STR=True,
-        filter_reason=[],
+        filter_mask=FilterFlag.NONE,
         map_quality=50,
         prefix_quality=[20, 21, 22],
         suffix_quality=[28, 29, 30],
@@ -219,7 +220,7 @@ def test_should_filter_indel(prefix, indel, suffix, expected_filter):
         read_name="r1",
         type=INDEL_TYPE.INSERTION,
         in_STR=False,
-        filter_reason=[],
+        filter_mask=FilterFlag.NONE,
         map_quality=50,
     )
     assert HomopolymerClassifier(test_indel).should_filter_indel() == expected_filter

@@ -2,9 +2,9 @@ import csv
 import logging
 from pathlib import Path
 import shutil
-from typing import Callable, List, Any, Optional, Union, Generator
+from typing import Callable, List, Any, Optional, Union, Generator, Iterable
 import polars as pl
-from .indel import Insertion, Deletion, Indel
+from .indel import Insertion, Deletion, TSV_HEADERS, IndelRecord
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,8 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
 
 def write_records_to_tsv(
     output_path: Path,
-    records: Generator[Indel, None, None],
-    row_converter: Callable[[Union[Insertion, Deletion]], List[Any]],
+    records: Iterable[Any],
+    row_converter: Callable[[Any], List[Any]],
     header: Optional[List[str]] = None,
     buffer_size: int = 10000,
     sort_key: Optional[Callable[[Union[Insertion, Deletion]], Any]] = None,
@@ -105,6 +105,101 @@ def write_records_to_tsv(
     except IOError as e:
         logger.error(f"Failed to write output file at {output_path}: {e}")
         return 0
+
+
+def candidate_to_scanner_row(record: IndelRecord) -> List[str]:
+    return [
+        record.contig,
+        str(record.ref_position),
+        record.type.value,
+        str(record.length),
+        f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
+        record.read_name,
+        str(record.in_STR),
+        "NA",
+        str(record.map_quality),
+    ]
+
+
+def passed_to_processor_row(record: IndelRecord) -> List[str]:
+    def format_list(scores: Optional[List[int]]) -> str:
+        return ",".join(map(str, scores)) if scores is not None else "NA"
+
+    return [
+        record.contig,
+        str(record.ref_position),
+        record.type.value,
+        str(record.length),
+        f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
+        record.read_name,
+        str(record.in_STR),
+        "NA",
+        str(record.map_quality),
+        format_list(record.prefix_quality),
+        format_list(record.indel_quality),
+        format_list(record.suffix_quality),
+    ]
+
+
+def write_candidate_records(
+    output_path: Path, records: Iterable[IndelRecord], buffer_size: int
+) -> int:
+    return write_records_to_tsv(
+        output_path=output_path,
+        records=records,
+        row_converter=candidate_to_scanner_row,
+        header=TSV_HEADERS.SCANNER.value,
+        buffer_size=buffer_size,
+    )
+
+
+def write_passed_indels(
+    output_path: Path, records: Iterable[IndelRecord], buffer_size: int
+) -> int:
+    return write_records_to_tsv(
+        output_path=output_path,
+        records=records,
+        row_converter=passed_to_processor_row,
+        header=TSV_HEADERS.PROCESSOR.value,
+        buffer_size=buffer_size,
+    )
+
+
+def aggregate_tsv_parts(
+    parts_dir: Path, final_output_path: Path, header: List[str]
+) -> None:
+    logger.info(
+        f"Aggregating partial results from {parts_dir} into {final_output_path}"
+    )
+    with open(final_output_path, "w", newline="") as f_out:
+        writer = csv.writer(f_out, delimiter="\t")
+        writer.writerow(header)
+        temp_dir_list = list(parts_dir.iterdir())
+        logger.debug(
+            f"Writing ({len(temp_dir_list)}) partial results to final output file..."
+        )
+        for part_path in temp_dir_list:
+            if part_path.name.endswith(".part.tsv"):
+                with open(part_path, "r") as f_in:
+                    reader = csv.reader(f_in, delimiter="\t")
+                    for row in reader:
+                        writer.writerow(row)
+
+
+def iter_tsv_rows_in_batches(
+    input_path: Path, batch_size: int
+) -> Generator[List[List[str]], None, None]:
+    with open(input_path, "r") as f_in:
+        reader = csv.reader(f_in, delimiter="\t")
+        next(reader, None)
+        batch: List[List[str]] = []
+        for row in reader:
+            batch.append(row)
+            if len(batch) >= batch_size:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
 
 def cleanup_temp_dir(temp_dir):

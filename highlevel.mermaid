@@ -8,7 +8,6 @@ graph TD;
     subgraph "Core Logic: indel_scanner/"
         D[main.py] -- Manages --> E[scanner_class.py]
         E -- Defines --> F[ContigScanner Class]
-        E -- Defines --> G[run_scan Worker]
     end
 
     subgraph "Key Libraries"
@@ -27,16 +26,13 @@ graph TD;
     C -- Loaded by --> D;
     D -- Uses --> L;
     D -- Creates & Manages --> K;
-    K -- Executes --> G;
-    G -- Uses instance of --> F;
+    K -- Executes --> F;
     F -- Uses --> H;
     F -- Uses --> I;
 
     A & B -- Read by --> F;
     
-    F -- Writes --> M;
-    M -- Merged by --> D;
-    D -- Creates --> N;
+    F -- Writes --> N;
 
     style F fill:#f9f,stroke:#333,stroke-width:2px
     style D fill:#ccf,stroke:#333,stroke-width:2px

@@ -16,12 +16,11 @@ STR_DIR="repeatregions"
 #CONFIG_FILE="config.yaml"
 
 
-# Run the scanner
+# Run the unified pipeline
 # This assumes you run it from the root of the 'indel_scanner' project directory
-python -m indel_scanner.main scan \
+python -m indel_scanner.main \
     --bam "$BAM_FILE" \
     --fasta "$FASTA_FILE" \
     --strdir "$STR_DIR" \
     --output "$OUTPUT_FILE" \
-    --config "$CONFIG_FILE" \
-    --process 
+    --config "$CONFIG_FILE"
