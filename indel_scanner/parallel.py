@@ -102,10 +102,12 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
 
         def format_worker_status() -> str:
             if not active_workers:
-                return "Workers: idle"
-            entries = ", ".join(f"{name}={contig}" for name,
-                                contig in sorted(active_workers.items()))
-            return f"Workers: {entries}"
+                return "W: idle"
+            entries = ", ".join(
+                f"{name.split('-')[-1]}={contig}"
+                for name, contig in sorted(active_workers.items())
+            )
+            return f"W: {entries}"
 
         def drain_status_queue():
             while True:
@@ -144,8 +146,6 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                             task_id, worker_status=format_worker_status())
                         if result:
                             contig_name, contig_records, contig_base_count, stats = result
-                            progress.print(
-                                f"[cyan]Completed contig[/cyan] {contig_name}")
                             total_interrogated_bases += contig_base_count
                             total_stats["reads"] += stats["reads_processed"]
                             total_stats["candidates"] += stats["candidates"]
