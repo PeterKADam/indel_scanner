@@ -41,10 +41,10 @@ Start End Len Motif Size( Sequence )
         # Assert: Check that the internal lists were populated correctly.
         # The line starting with '*' and 'Start' should be skipped.
         # The empty line should be skipped.
-        # The homopolymer '20(G)' at position 200 should be skipped.
-        assert classifier.starts == (77, 98, 128)
-        assert classifier.ends == (85, 115, 147)
-        assert classifier.num_regions == 3
+        # The homopolymer '20(G)' at position 200 should be loaded for later filtering.
+        assert classifier.starts == (77, 98, 200, 128)
+        assert classifier.ends == (85, 115, 220, 147)
+        assert classifier.num_regions == 4
 
     def test_initialization_with_no_valid_regions(self, mocker, mock_config):
         """
