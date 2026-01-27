@@ -15,4 +15,15 @@ set -euo pipefail
 #   --max-motif 100 \
 #   --min-length 10
 
-"/home/peter/pkadmaster/indel_scanner/sbatch/run_rptrf_sbatch.sh" "$@"
+FASTA_FILE="$2"
+SAMPLE_NAME="$4"
+DATA_DIR="$6"
+RPTRF_BIN="$8"
+MAX_MOTIF="${10}"
+MIN_LENGTH="${12}"
+
+OUT_DIR="${DATA_DIR}/${SAMPLE_NAME}/repeatregions"
+mkdir -p "$OUT_DIR"
+
+cd "$OUT_DIR"
+"${RPTRF_BIN}" -s "${FASTA_FILE}" -m "${MAX_MOTIF}" -t "${MIN_LENGTH}"
