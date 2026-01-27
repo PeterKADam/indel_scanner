@@ -6,7 +6,7 @@
 # Define input files and output location
 BAM_FILE="/home/peterkad/pkadmaster/data/mutationalscanning_bam/ph/diploid_assembly/ph_plus_unmapped_diploid_v2.bam"
 FASTA_FILE="/home/peterkad/pkadmaster/data/ph/ph_diploid.fa"
-OUTPUT_FILE="/home/peterkad/pkadmaster/indel_scanner/results/test/ph/12-01-ph"
+OUTPUT_FILE="/home/peterkad/pkadmaster/indel_scanner/results/test/ph/"
 CONFIG_FILE="config.yaml"
 STR_DIR="repeatregions"
 
