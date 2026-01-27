@@ -88,10 +88,12 @@ class PipelineConfig:
 
         self.bamfile: Path = Path(self.args.bam)
         self.fastafile: Path = Path(self.args.fasta)
+        self.sample_name = self.bamfile.stem
         self.base_output_path: Path = Path(self.args.output)
         run_stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        self.run_id = f"{run_stamp}_{self.bamfile.stem}"
-        self.output_path: Path = self.base_output_path / self.run_id
+        self.run_id = run_stamp
+        self.output_path: Path = self.base_output_path / self.sample_name / run_stamp
+        self.log_dir: Path = self.output_path / "logs"
         self.str_directory: Path = Path(self.args.strdir)
 
         self.scanner = {**DEFAULT_SCANNER, **(config_data.get("scanner") or {})}
@@ -177,6 +179,7 @@ class PipelineConfig:
                 shutil.rmtree(self.temp_dir, ignore_errors=True)
             self.temp_dir.mkdir(parents=True, exist_ok=True)
             self.processor_output_dir.mkdir(parents=True, exist_ok=True)
+            self.log_dir.mkdir(parents=True, exist_ok=True)
             if self.passed_parts_dir.exists():
                 shutil.rmtree(self.passed_parts_dir, ignore_errors=True)
             self.passed_parts_dir.mkdir(parents=True, exist_ok=True)
@@ -186,6 +189,52 @@ class PipelineConfig:
         except Exception as e:
             logger.error(f"Error setting up output directories: {e}")
             sys.exit(1)
+
+    def write_settings_file(self) -> None:
+        settings_path = self.output_path / "settings_used.yaml"
+        settings_payload = {
+            "args": self._serialize_for_yaml(vars(self.args)),
+            "input": {
+                "bam": str(self.bamfile),
+                "fasta": str(self.fastafile),
+                "str_directory": str(self.str_directory),
+            },
+            "output": {
+                "base_output_path": str(self.base_output_path),
+                "sample_name": self.sample_name,
+                "run_id": self.run_id,
+                "output_path": str(self.output_path),
+                "log_dir": str(self.log_dir),
+            },
+            "config": self._serialize_for_yaml(self.yaml),
+            "resolved": self._serialize_for_yaml(
+                {
+                    "scanner": self.scanner,
+                    "processor": self.processor,
+                    "reporting": self.reporting,
+                    "io": self.io,
+                    "pipeline": self.pipeline,
+                }
+            ),
+        }
+        try:
+            with open(settings_path, "w", encoding="utf-8") as handle:
+                yaml.safe_dump(settings_payload, handle, sort_keys=False)
+            logger.info("Wrote settings file to %s", settings_path)
+        except Exception as exc:
+            logger.error("Failed to write settings file at %s: %s", settings_path, exc)
+
+    @staticmethod
+    def _serialize_for_yaml(value):
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, dict):
+            return {key: PipelineConfig._serialize_for_yaml(val) for key, val in value.items()}
+        if isinstance(value, list):
+            return [PipelineConfig._serialize_for_yaml(item) for item in value]
+        if isinstance(value, tuple):
+            return [PipelineConfig._serialize_for_yaml(item) for item in value]
+        return value
 
 
 class Config:
@@ -207,7 +256,10 @@ class Config:
             "-o", "--output", required=True, help="Path to the output directory."
         )
         parser.add_argument(
-            "-s", "--strdir", required=True, help="Directory containing STR results."
+            "-s",
+            "--strdir",
+            required=True,
+            help="Directory containing STR results for the sample.",
         )
         parser.add_argument(
             "-c",
