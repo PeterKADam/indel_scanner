@@ -1,5 +1,5 @@
 scanner:
-  num_processes: 4
+  num_processes: 10
   min_indel_size: 1
   preload_contigs: true
   min_map_quality: 30
@@ -39,6 +39,13 @@ pipeline:
   passed_parts_dir_name: temp_passed_indel_parts
   sampling_bases: 1000000
   sampling_strategy: largest_contig
+  imperfect_str:
+    enabled: true
+    expand_bp: 0
+    window_bp: 20
+    motif_min: 2
+    motif_max: 6
+    max_mismatches: 2
   snp_label: snp
   indel_bins:
     - label: indel_1bp

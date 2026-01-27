@@ -12,6 +12,14 @@ def mock_config(tmp_path):
     """Provides a mock PipelineConfig pointing to a temporary directory."""
     config = MagicMock(spec=PipelineConfig)
     config.str_directory = tmp_path  # Use pytest's tmp_path for a realistic Path object
+    config.imperfect_str = {
+        "enabled": False,
+        "expand_bp": 0,
+        "window_bp": 20,
+        "motif_min": 2,
+        "motif_max": 6,
+        "max_mismatches": 2,
+    }
     return config
 
 
@@ -117,6 +125,30 @@ Start   End     Length  Motif
         classifier.num_regions = 2
 
         assert classifier.is_in_str(position) == expected_result
+
+    def test_imperfect_str_like_detection(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.imperfect_str["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = "GGGGGTATACGATATCCCC"
+        assert classifier.is_str_like(9, contig_seq)
+
+    def test_imperfect_str_disabled(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.imperfect_str["enabled"] = False
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = "GGGGGTATACGATATCCCC"
+        assert not classifier.is_str_like(9, contig_seq)
+
+    def test_str_region_expansion(self, mocker, mock_config):
+        mock_config.imperfect_str["expand_bp"] = 10
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[(100, 110)])
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        assert classifier.is_in_str(95)
+        assert classifier.is_in_str(120)
 
     def test_file_not_found(self, mocker, mock_config):
         """

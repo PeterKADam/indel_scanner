@@ -23,6 +23,13 @@ class STRClassifier:
         """
         self.config = config
         self.contig = contig  # beautiful naming scheme right there m8
+        self.imperfect_cfg = self.config.imperfect_str
+        self.imperfect_enabled = bool(self.imperfect_cfg.get("enabled", False))
+        self.imperfect_window_bp = int(self.imperfect_cfg.get("window_bp", 20))
+        self.imperfect_motif_min = int(self.imperfect_cfg.get("motif_min", 2))
+        self.imperfect_motif_max = int(self.imperfect_cfg.get("motif_max", 6))
+        self.imperfect_max_mismatches = int(self.imperfect_cfg.get("max_mismatches", 2))
+        self.imperfect_expand_bp = int(self.imperfect_cfg.get("expand_bp", 0))
 
         repeat_regions = self._read_repeat_regions(contig)
 
@@ -62,6 +69,9 @@ class STRClassifier:
                 if len(parts) >= 5:
                     start = int(parts[0])
                     end = int(parts[1])
+                    if self.imperfect_expand_bp:
+                        start = max(0, start - self.imperfect_expand_bp)
+                        end = end + self.imperfect_expand_bp
 
                     # Extract motif info in the form of '4(ACCC)'
                     motif_info = parts[3]
@@ -99,3 +109,46 @@ class STRClassifier:
         candidate_end = self.ends[candidate_index]
 
         return candidate_start <= position <= candidate_end
+
+    def is_str_like(self, position: int, contig_seq: str) -> bool:
+        if self.is_in_str(position):
+            return True
+        if not self.imperfect_enabled:
+            return False
+        return self._is_imperfect_repeat(position, contig_seq)
+
+    def _is_imperfect_repeat(self, position: int, contig_seq: str) -> bool:
+        if not contig_seq:
+            return False
+        if self.imperfect_window_bp <= 0:
+            return False
+        window = self._extract_window(contig_seq, position, self.imperfect_window_bp)
+        if len(window) < self.imperfect_motif_min * 2:
+            return False
+        for motif_len in range(self.imperfect_motif_min, self.imperfect_motif_max + 1):
+            if len(window) < motif_len * 2:
+                continue
+            max_offset = min(motif_len, len(window) - motif_len + 1)
+            for offset in range(max_offset):
+                motif = window[offset : offset + motif_len]
+                if "N" in motif:
+                    continue
+                mismatches = 0
+                for idx, base in enumerate(window):
+                    expected = motif[(idx - offset) % motif_len]
+                    if base == "N" or base != expected:
+                        mismatches += 1
+                        if mismatches > self.imperfect_max_mismatches:
+                            break
+                if mismatches <= self.imperfect_max_mismatches:
+                    return True
+        return False
+
+    @staticmethod
+    def _extract_window(contig_seq: str, position: int, window_bp: int) -> str:
+        half_window = window_bp // 2
+        start = max(0, position - half_window)
+        end = min(len(contig_seq), start + window_bp)
+        if end - start < window_bp:
+            start = max(0, end - window_bp)
+        return contig_seq[start:end]

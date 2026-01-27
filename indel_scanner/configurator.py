@@ -53,6 +53,14 @@ DEFAULT_PIPELINE: Dict[str, Any] = {
     "passed_parts_dir_name": "temp_passed_indel_parts",
     "sampling_bases": 1000000,
     "sampling_strategy": "largest_contig",
+    "imperfect_str": {
+        "enabled": False,
+        "expand_bp": 0,
+        "window_bp": 20,
+        "motif_min": 2,
+        "motif_max": 6,
+        "max_mismatches": 2,
+    },
     "indel_bins": [
         {"label": "indel_1bp", "min": 1, "max": 1},
         {"label": "indel_2_3bp", "min": 2, "max": 3},
@@ -80,6 +88,10 @@ class PipelineConfig:
         self.reporting = {**DEFAULT_REPORTING, **(config_data.get("reporting") or {})}
         self.io = {**DEFAULT_IO, **(config_data.get("io") or {})}
         self.pipeline = {**DEFAULT_PIPELINE, **(config_data.get("pipeline") or {})}
+        self.pipeline["imperfect_str"] = {
+            **DEFAULT_PIPELINE["imperfect_str"],
+            **(self.pipeline.get("imperfect_str") or {}),
+        }
 
         self.num_processes: int = self.scanner["num_processes"]
         self.min_indel_size: int = self.scanner["min_indel_size"]
@@ -116,6 +128,7 @@ class PipelineConfig:
         self.sampling_strategy: str = self.pipeline["sampling_strategy"]
         self.indel_bins = self.pipeline["indel_bins"]
         self.snp_label: str = self.pipeline["snp_label"]
+        self.imperfect_str = self.pipeline["imperfect_str"]
         self.sampling_contig: str = ""
         self.contigs = self._parse_contigs(self.args.contigs, self.scanner.get("contigs"))
 

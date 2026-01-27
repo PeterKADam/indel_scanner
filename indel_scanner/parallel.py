@@ -8,9 +8,9 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
-from multiprocessing import Pool, cpu_count, current_process, Manager
-import time
+from multiprocessing import Pool, cpu_count, current_process, Queue
 import logging
+from threading import Event, Lock, Thread
 from queue import Empty
 from .configurator import PipelineConfig
 from .scanner import ContigScanner
@@ -97,36 +97,49 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     }
     in_memory_records = []
 
-    with Manager() as manager:
-        status_queue = manager.Queue()
-        active_workers: dict[str, str] = {}
+    status_queue = Queue()
+    active_workers: dict[str, str] = {}
+    active_lock = Lock()
 
-        def format_worker_status() -> str:
+    def format_worker_status() -> str:
+        with active_lock:
             if not active_workers:
                 return "W: idle"
             entries = ", ".join(
                 f"{name.split('-')[-1]}={contig}"
                 for name, contig in sorted(active_workers.items())
             )
-            return f"W: {entries}"
+        return f"W: {entries}"
 
-        def drain_status_queue():
-            while True:
-                try:
-                    event, worker_name, contig_name = status_queue.get_nowait()
-                except Empty:
-                    break
+    def drain_status_queue():
+        while True:
+            try:
+                event, worker_name, contig_name = status_queue.get_nowait()
+            except Empty:
+                break
+            with active_lock:
                 if event == "start":
                     active_workers[worker_name] = contig_name
                 elif event == "done":
                     active_workers.pop(worker_name, None)
 
-        with Progress(*progress_columns, transient=False) as progress:
-            task_id = progress.add_task(
-                "[green]Scanning contigs...",
-                total=len(contigs),
-                worker_status="Workers: idle",
-            )
+    with Progress(*progress_columns, transient=False) as progress:
+        task_id = progress.add_task(
+            "[green]Scanning contigs...",
+            total=len(contigs),
+            worker_status="W: idle",
+        )
+        stop_event = Event()
+
+        def status_updater():
+            while not stop_event.is_set():
+                drain_status_queue()
+                progress.update(task_id, worker_status=format_worker_status())
+                stop_event.wait(0.2)
+
+        status_thread = Thread(target=status_updater, daemon=True)
+        status_thread.start()
+        try:
             with Pool(
                 processes=parallel_n,
                 initializer=_init_worker,
@@ -138,64 +151,49 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                     status_queue,
                 ),
             ) as pool:
-                tasks = [
-                    pool.apply_async(_process_contig_streaming, (contig,))
-                    for contig in contigs
-                ]
+                results_iterator = pool.imap_unordered(
+                    _process_contig_streaming, contigs)
                 with Timer("Parallel pipeline"):
-                    pending = tasks
-                    while pending:
-                        drain_status_queue()
-                        progress.update(
-                            task_id, worker_status=format_worker_status())
-                        remaining = []
-                        for task in pending:
-                            if not task.ready():
-                                remaining.append(task)
-                                continue
-                            result = task.get()
-                            if result:
-                                contig_name, contig_records, contig_base_count, stats = result
-                                total_interrogated_bases += contig_base_count
-                                total_stats["reads"] += stats["reads_processed"]
-                                total_stats["candidates"] += stats["candidates"]
-                                total_stats["passed"] += stats["passed"]
-                                total_stats["total_aligned_bases"] += stats["total_aligned_bases"]
-                                if stats.get("sampled_contig"):
-                                    total_stats["sampling_bases_total"] += stats[
-                                        "sampling_bases_total"
-                                    ]
-                                    for k, v in stats["sampling_passable_by_type"].items():
-                                        total_stats["sampling_passable_by_type"][k] = (
-                                            total_stats["sampling_passable_by_type"].get(
-                                                k, 0
-                                            )
-                                            + v
+                    for result in results_iterator:
+                        if result:
+                            contig_name, contig_records, contig_base_count, stats = result
+                            total_interrogated_bases += contig_base_count
+                            total_stats["reads"] += stats["reads_processed"]
+                            total_stats["candidates"] += stats["candidates"]
+                            total_stats["passed"] += stats["passed"]
+                            total_stats["total_aligned_bases"] += stats["total_aligned_bases"]
+                            if stats.get("sampled_contig"):
+                                total_stats["sampling_bases_total"] += stats["sampling_bases_total"]
+                                for k, v in stats["sampling_passable_by_type"].items():
+                                    total_stats["sampling_passable_by_type"][k] = (
+                                        total_stats["sampling_passable_by_type"].get(
+                                            k, 0
                                         )
-                                for k, v in stats["type_counts"].items():
-                                    total_stats["type_counts"][k] = (
-                                        total_stats["type_counts"].get(
-                                            k, 0) + v
+                                        + v
                                     )
+                            for k, v in stats["type_counts"].items():
+                                total_stats["type_counts"][k] = (
+                                    total_stats["type_counts"].get(
+                                        k, 0) + v
+                                )
 
-                                if scannerconfig.in_memory:
-                                    in_memory_records.extend(
-                                        contig_records or [])
-                                    if (
-                                        scannerconfig.max_in_memory_records
-                                        and len(in_memory_records)
-                                        > scannerconfig.max_in_memory_records
-                                    ):
-                                        logger.warning(
-                                            "In-memory limit exceeded; consider disabling in-memory mode."
-                                        )
-                                progress.update(task_id, advance=1)
-                        pending = remaining
-                        if pending:
-                            time.sleep(0.1)
-                    drain_status_queue()
-                    progress.update(
-                        task_id, worker_status=format_worker_status())
+                            if scannerconfig.in_memory:
+                                in_memory_records.extend(
+                                    contig_records or [])
+                                if (
+                                    scannerconfig.max_in_memory_records
+                                    and len(in_memory_records)
+                                    > scannerconfig.max_in_memory_records
+                                ):
+                                    logger.warning(
+                                        "In-memory limit exceeded; consider disabling in-memory mode."
+                                    )
+                            progress.update(task_id, advance=1)
+        finally:
+            stop_event.set()
+            status_thread.join()
+            drain_status_queue()
+            progress.update(task_id, worker_status=format_worker_status())
 
     if scannerconfig.in_memory:
         from .IO import write_passed_indels

@@ -182,6 +182,8 @@ def aggregate_tsv_parts(
                 with open(part_path, "r") as f_in:
                     reader = csv.reader(f_in, delimiter="\t")
                     for row in reader:
+                        if row == header:
+                            continue
                         writer.writerow(row)
 
 
