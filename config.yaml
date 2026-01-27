@@ -50,6 +50,11 @@ pipeline:
     enabled: true
     window_bp: 32
     entropy_threshold: 1.2
+  repeat_run:
+    enabled: true
+    min_run_bp: 16
+    max_window_bp: 80
+    max_mismatches: 2
   snp_label: snp
   indel_bins:
     - label: indel_1bp

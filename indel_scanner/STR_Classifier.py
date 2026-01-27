@@ -37,6 +37,11 @@ class STRClassifier:
         self.low_complexity_entropy_threshold = float(
             self.low_complexity_cfg.get("entropy_threshold", 1.2)
         )
+        self.repeat_run_cfg = self.config.repeat_run
+        self.repeat_run_enabled = bool(self.repeat_run_cfg.get("enabled", False))
+        self.repeat_run_min_bp = int(self.repeat_run_cfg.get("min_run_bp", 16))
+        self.repeat_run_max_window_bp = int(self.repeat_run_cfg.get("max_window_bp", 80))
+        self.repeat_run_max_mismatches = int(self.repeat_run_cfg.get("max_mismatches", 2))
 
         repeat_regions = self._read_repeat_regions(contig)
 
@@ -121,8 +126,12 @@ class STRClassifier:
         if self.is_in_str(position):
             return True
         if not self.imperfect_enabled:
+            if self._is_repeat_run(position, contig_seq):
+                return True
             return self._is_low_complexity(position, contig_seq)
         if self._is_imperfect_repeat(position, contig_seq):
+            return True
+        if self._is_repeat_run(position, contig_seq):
             return True
         return self._is_low_complexity(position, contig_seq)
 
@@ -144,6 +153,55 @@ class STRClassifier:
         window = self._extract_window(contig_seq, position, self.low_complexity_window_bp)
         entropy = self._shannon_entropy(window)
         return entropy <= self.low_complexity_entropy_threshold
+
+    def _is_repeat_run(self, position: int, contig_seq: str) -> bool:
+        if not self.repeat_run_enabled:
+            return False
+        if not contig_seq:
+            return False
+        if self.repeat_run_max_window_bp <= 0:
+            return False
+        if self.repeat_run_min_bp <= 0:
+            return False
+        window = self._extract_window(contig_seq, position, self.repeat_run_max_window_bp)
+        if len(window) < self.imperfect_motif_min * 2:
+            return False
+        center = len(window) // 2
+        best_run = 0
+        for motif_len in range(self.imperfect_motif_min, self.imperfect_motif_max + 1):
+            if len(window) < motif_len * 2:
+                continue
+            for phase in range(motif_len):
+                mismatches = 0
+                run_left = 0
+                idx = center - 1
+                while idx >= 0:
+                    expected = window[(idx - phase) % motif_len]
+                    base = window[idx]
+                    if base == "N" or base != expected:
+                        mismatches += 1
+                        if mismatches > self.repeat_run_max_mismatches:
+                            break
+                    run_left += 1
+                    idx -= 1
+                mismatches = 0
+                run_right = 0
+                idx = center
+                while idx < len(window):
+                    expected = window[(idx - phase) % motif_len]
+                    base = window[idx]
+                    if base == "N" or base != expected:
+                        mismatches += 1
+                        if mismatches > self.repeat_run_max_mismatches:
+                            break
+                    run_right += 1
+                    idx += 1
+                run_len = run_left + run_right
+                if run_len > best_run:
+                    best_run = run_len
+                if run_len >= self.repeat_run_min_bp:
+                    return True
+        return False
 
     def _is_imperfect_repeat_window(self, window: str) -> bool:
         if len(window) < self.imperfect_motif_min * 2:

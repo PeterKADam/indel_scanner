@@ -25,6 +25,12 @@ def mock_config(tmp_path):
         "window_bp": 32,
         "entropy_threshold": 1.2,
     }
+    config.repeat_run = {
+        "enabled": False,
+        "min_run_bp": 16,
+        "max_window_bp": 80,
+        "max_mismatches": 2,
+    }
     return config
 
 
@@ -171,6 +177,16 @@ Start   End     Length  Motif
         contig_seq = (
             "ATGGAGTGTATATATATATATATATATGGAGTATATATATATATAT"
             "GGAGTATATATATATATGGAGTATATA"
+        )
+        assert classifier.is_str_like(20, contig_seq)
+
+    def test_repeat_run_detection(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.repeat_run["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = (
+            "AGACGATTAACTAAAGATACACACACACACACACACACACACACACCCCAGGTAAA"
         )
         assert classifier.is_str_like(20, contig_seq)
 
