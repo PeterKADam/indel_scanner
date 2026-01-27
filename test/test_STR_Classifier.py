@@ -20,6 +20,11 @@ def mock_config(tmp_path):
         "motif_max": 6,
         "max_mismatches": 2,
     }
+    config.low_complexity = {
+        "enabled": False,
+        "window_bp": 32,
+        "entropy_threshold": 1.2,
+    }
     return config
 
 
@@ -157,6 +162,17 @@ Start   End     Length  Motif
 
         contig_seq = "GGGGGTATACGATATCCCC"
         assert not classifier.is_str_like(9, contig_seq)
+
+    def test_low_complexity_filter(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.low_complexity["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = (
+            "ATGGAGTGTATATATATATATATATATGGAGTATATATATATATAT"
+            "GGAGTATATATATATATGGAGTATATA"
+        )
+        assert classifier.is_str_like(20, contig_seq)
 
     def test_str_region_expansion(self, mocker, mock_config):
         mock_config.imperfect_str["expand_bp"] = 10

@@ -1,4 +1,5 @@
 import bisect
+import math
 from pathlib import Path
 from typing import List, Tuple
 
@@ -30,6 +31,12 @@ class STRClassifier:
         self.imperfect_motif_max = int(self.imperfect_cfg.get("motif_max", 6))
         self.imperfect_max_mismatches = int(self.imperfect_cfg.get("max_mismatches", 2))
         self.imperfect_expand_bp = int(self.imperfect_cfg.get("expand_bp", 0))
+        self.low_complexity_cfg = self.config.low_complexity
+        self.low_complexity_enabled = bool(self.low_complexity_cfg.get("enabled", False))
+        self.low_complexity_window_bp = int(self.low_complexity_cfg.get("window_bp", 32))
+        self.low_complexity_entropy_threshold = float(
+            self.low_complexity_cfg.get("entropy_threshold", 1.2)
+        )
 
         repeat_regions = self._read_repeat_regions(contig)
 
@@ -114,8 +121,10 @@ class STRClassifier:
         if self.is_in_str(position):
             return True
         if not self.imperfect_enabled:
-            return False
-        return self._is_imperfect_repeat(position, contig_seq)
+            return self._is_low_complexity(position, contig_seq)
+        if self._is_imperfect_repeat(position, contig_seq):
+            return True
+        return self._is_low_complexity(position, contig_seq)
 
     def _is_imperfect_repeat(self, position: int, contig_seq: str) -> bool:
         if not contig_seq:
@@ -124,6 +133,17 @@ class STRClassifier:
             return False
         window = self._extract_window(contig_seq, position, self.imperfect_window_bp)
         return self._is_imperfect_repeat_window(window)
+
+    def _is_low_complexity(self, position: int, contig_seq: str) -> bool:
+        if not self.low_complexity_enabled:
+            return False
+        if not contig_seq:
+            return False
+        if self.low_complexity_window_bp <= 0:
+            return False
+        window = self._extract_window(contig_seq, position, self.low_complexity_window_bp)
+        entropy = self._shannon_entropy(window)
+        return entropy <= self.low_complexity_entropy_threshold
 
     def _is_imperfect_repeat_window(self, window: str) -> bool:
         if len(window) < self.imperfect_motif_min * 2:
@@ -146,6 +166,25 @@ class STRClassifier:
                 if mismatches <= self.imperfect_max_mismatches:
                     return True
         return False
+
+    @staticmethod
+    def _shannon_entropy(seq: str) -> float:
+        if not seq:
+            return 0.0
+        counts = {"A": 0, "C": 0, "G": 0, "T": 0}
+        total = 0
+        for base in seq:
+            if base in counts:
+                counts[base] += 1
+                total += 1
+        if total == 0:
+            return 0.0
+        entropy = 0.0
+        for count in counts.values():
+            if count:
+                p = count / total
+                entropy -= p * math.log2(p)
+        return entropy
 
     @staticmethod
     def _extract_window(contig_seq: str, position: int, window_bp: int) -> str:

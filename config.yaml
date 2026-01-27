@@ -46,6 +46,10 @@ pipeline:
     motif_min: 2
     motif_max: 6
     max_mismatches: 2
+  low_complexity:
+    enabled: true
+    window_bp: 32
+    entropy_threshold: 1.2
   snp_label: snp
   indel_bins:
     - label: indel_1bp

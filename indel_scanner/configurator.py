@@ -61,6 +61,11 @@ DEFAULT_PIPELINE: Dict[str, Any] = {
         "motif_max": 6,
         "max_mismatches": 2,
     },
+    "low_complexity": {
+        "enabled": False,
+        "window_bp": 32,
+        "entropy_threshold": 1.2,
+    },
     "indel_bins": [
         {"label": "indel_1bp", "min": 1, "max": 1},
         {"label": "indel_2_3bp", "min": 2, "max": 3},
@@ -91,6 +96,10 @@ class PipelineConfig:
         self.pipeline["imperfect_str"] = {
             **DEFAULT_PIPELINE["imperfect_str"],
             **(self.pipeline.get("imperfect_str") or {}),
+        }
+        self.pipeline["low_complexity"] = {
+            **DEFAULT_PIPELINE["low_complexity"],
+            **(self.pipeline.get("low_complexity") or {}),
         }
 
         self.num_processes: int = self.scanner["num_processes"]
@@ -129,6 +138,7 @@ class PipelineConfig:
         self.indel_bins = self.pipeline["indel_bins"]
         self.snp_label: str = self.pipeline["snp_label"]
         self.imperfect_str = self.pipeline["imperfect_str"]
+        self.low_complexity = self.pipeline["low_complexity"]
         self.sampling_contig: str = ""
         self.contigs = self._parse_contigs(self.args.contigs, self.scanner.get("contigs"))
 
