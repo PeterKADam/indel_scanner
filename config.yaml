@@ -1,5 +1,5 @@
 scanner:
-  num_processes: 10
+  num_processes: 20
   min_indel_size: 1
   preload_contigs: true
   min_map_quality: 30
