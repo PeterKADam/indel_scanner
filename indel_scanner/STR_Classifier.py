@@ -123,6 +123,9 @@ class STRClassifier:
         if self.imperfect_window_bp <= 0:
             return False
         window = self._extract_window(contig_seq, position, self.imperfect_window_bp)
+        return self._is_imperfect_repeat_window(window)
+
+    def _is_imperfect_repeat_window(self, window: str) -> bool:
         if len(window) < self.imperfect_motif_min * 2:
             return False
         for motif_len in range(self.imperfect_motif_min, self.imperfect_motif_max + 1):

@@ -134,6 +134,22 @@ Start   End     Length  Motif
         contig_seq = "GGGGGTATACGATATCCCC"
         assert classifier.is_str_like(9, contig_seq)
 
+    def test_imperfect_str_like_with_flanks(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.imperfect_str["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = "GGGGGCACATACACACAGGGG"
+        assert classifier.is_str_like(12, contig_seq)
+
+    def test_imperfect_str_like_short_repeat_in_window(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.imperfect_str["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = "CACACACACACACATACACACACACACACACACACACACACACACACACACACAC"
+        assert classifier.is_str_like(20, contig_seq)
+
     def test_imperfect_str_disabled(self, mocker, mock_config):
         mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
         mock_config.imperfect_str["enabled"] = False
