@@ -7,7 +7,7 @@
 BAM_FILE="/home/peterkad/pkadmaster/data/mutationalscanning_bam/ph/diploid_assembly/ph_plus_unmapped_diploid_v2.bam"
 FASTA_FILE="/home/peterkad/pkadmaster/data/ph/ph_diploid.fa"
 # Base results directory: output becomes {OUTPUT_FILE}/{sample}/{timestamp}/
-OUTPUT_FILE="/home/peterkad/pkadmaster/indel_scanner/results/test/ph/"
+OUTPUT_FILE="/home/peterkad/pkadmaster/indel_scanner/results"
 # STR results directory for the sample
 STR_DIR="/home/peterkad/pkadmaster/data/ph/repeatregions"
 CONFIG_FILE="config.yaml"
