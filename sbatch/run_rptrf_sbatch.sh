@@ -15,6 +15,4 @@ set -euo pipefail
 #   --max-motif 100 \
 #   --min-length 10
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-"${PROJECT_ROOT}/run_rptrf.sh" "$@"
+"/home/peter/pkadmaster/indel_scanner/sbatch/run_rptrf_sbatch.sh" "$@"
