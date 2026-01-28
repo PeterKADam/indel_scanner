@@ -10,6 +10,7 @@ from rich.progress import (
 )
 from multiprocessing import Pool, cpu_count, current_process, Queue
 import logging
+import time
 from threading import Event, Lock, Thread
 from queue import Empty
 from .configurator import PipelineConfig
@@ -99,17 +100,29 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
 
     status_queue = Queue()
     active_workers: dict[str, str] = {}
+    worker_start_times: dict[str, float] = {}
     active_lock = Lock()
 
     def format_worker_status() -> str:
+        max_workers = 20
+        columns = 4
         with active_lock:
             if not active_workers:
                 return "W: idle"
-            entries = ", ".join(
-                f"{name.split('-')[-1]}={contig}"
-                for name, contig in sorted(active_workers.items())
-            )
-        return f"W: {entries}"
+            entries = []
+            for name, contig in sorted(active_workers.items()):
+                worker_id = name.split("-")[-1]
+                start_time = worker_start_times.get(name)
+                elapsed = time.monotonic() - start_time if start_time else 0.0
+                entries.append(f"W{worker_id} {contig} ({elapsed:.1f}s)")
+            if len(entries) > max_workers:
+                extra = len(entries) - max_workers
+                entries = entries[:max_workers]
+                entries.append(f"+{extra} more")
+            rows = []
+            for idx in range(0, len(entries), columns):
+                rows.append(" | ".join(entries[idx : idx + columns]))
+            return "\n".join(rows)
 
     def drain_status_queue():
         while True:
@@ -120,8 +133,10 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
             with active_lock:
                 if event == "start":
                     active_workers[worker_name] = contig_name
+                    worker_start_times[worker_name] = time.monotonic()
                 elif event == "done":
                     active_workers.pop(worker_name, None)
+                    worker_start_times.pop(worker_name, None)
 
     with Progress(*progress_columns, transient=False) as progress:
         task_id = progress.add_task(
