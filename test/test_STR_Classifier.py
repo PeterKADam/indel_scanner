@@ -60,9 +60,10 @@ Start End Len Motif Size( Sequence )
         # Assert: Check that the internal lists were populated correctly.
         # The line starting with '*' and 'Start' should be skipped.
         # The empty line should be skipped.
-        # The homopolymer '20(G)' at position 200 should be loaded for later filtering.
+        # The homopolymer '20(G)' at position 200 is included in parsed regions.
         assert classifier.starts == (77, 98, 200, 128)
         assert classifier.ends == (85, 115, 220, 147)
+        assert classifier.motifs == ("TA", "ATTTAT", "G", "ATTTAT")
         assert classifier.num_regions == 4
 
     def test_initialization_with_no_valid_regions(self, mocker, mock_config):
@@ -71,11 +72,7 @@ Start End Len Motif Size( Sequence )
         WHEN STRClassifier is initialized
         THEN it should handle the empty case gracefully.
         """
-        fake_file_content = """
-Start   End     Length  Motif
-200     250     50      5(A)
-300     350     50      4(G)
-"""
+        fake_file_content = "Start End Len Motif Size( Sequence )\n"
         mocker.patch("builtins.open", mock_open(read_data=fake_file_content))
         classifier = STRClassifier(config=mock_config, contig="chr1")
 
@@ -125,14 +122,15 @@ Start   End     Length  Motif
         # For this test, it's easier to mock the method that produces the data
         # rather than the file read itself. This isolates the `is_in_str` logic.
         mocker.patch.object(STRClassifier, '_read_repeat_regions', return_value=[
-            (100, 200),
-            (300, 400)
+            (100, 200, "TA"),
+            (300, 400, "AC")
         ])
 
         classifier = STRClassifier(config=mock_config, contig="chr1")
 
         # We need to manually set these since we bypassed part of __init__
         classifier.starts, classifier.ends = zip(*[(100, 200), (300, 400)])
+        classifier.motifs = ("TA", "AC")
         classifier.num_regions = 2
 
         assert classifier.is_in_str(position) == expected_result
@@ -192,11 +190,23 @@ Start   End     Length  Motif
 
     def test_str_region_expansion(self, mocker, mock_config):
         mock_config.imperfect_str["expand_bp"] = 10
-        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[(100, 110)])
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[(100, 110, "TA")])
         classifier = STRClassifier(config=mock_config, contig="chr1")
 
         assert classifier.is_in_str(95)
         assert classifier.is_in_str(120)
+
+    def test_matches_rptrf_motif_phase_aware(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[(0, 5, "TA")])
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+        contig_seq = "ATATAT"
+        assert classifier.matches_rptrf_motif(1, contig_seq)
+
+    def test_matches_rptrf_motif_no_match(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[(0, 5, "TA")])
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+        contig_seq = "ACACAC"
+        assert not classifier.matches_rptrf_motif(1, contig_seq)
 
     def test_file_not_found(self, mocker, mock_config):
         """

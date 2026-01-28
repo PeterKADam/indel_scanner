@@ -64,7 +64,9 @@ class ContigScanner:
                             read_pos_tracker + length : read_pos_tracker + length + 5
                         ],
                         read_name=read.query_name,
-                        in_STR=str_classifier.is_str_like(ref_pos_tracker, contig_seq),
+                        in_STR=str_classifier.matches_rptrf_motif(
+                            ref_pos_tracker, contig_seq
+                        ),
                         map_quality=read.mapping_quality,
                         indel_content=read.query_sequence[
                             read_pos_tracker : read_pos_tracker + length
@@ -98,7 +100,9 @@ class ContigScanner:
                             ref_pos_tracker + length : ref_pos_tracker + length + 5
                         ],
                         read_name=read.query_name,
-                        in_STR=str_classifier.is_str_like(ref_pos_tracker, contig_seq),
+                        in_STR=str_classifier.matches_rptrf_motif(
+                            ref_pos_tracker, contig_seq
+                        ),
                         map_quality=read.mapping_quality,
                         prefix_quality=prefix_quality,
                         suffix_quality=suffix_quality,

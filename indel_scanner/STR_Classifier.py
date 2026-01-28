@@ -48,12 +48,13 @@ class STRClassifier:
         if not repeat_regions:
             self.starts = ()
             self.ends = ()
+            self.motifs = ()
         else:
-            self.starts, self.ends = zip(*repeat_regions)
+            self.starts, self.ends, self.motifs = zip(*repeat_regions)
 
         self.num_regions = len(self.starts)
 
-    def _read_repeat_regions(self, contig) -> List[Tuple[int, int]]:
+    def _read_repeat_regions(self, contig) -> List[Tuple[int, int, str]]:
         """
         Reads repeat regions from a file and returns a list of tuples
         (start, end, length, motif_size, motif_sequence), excluding homopolymer regions.
@@ -64,7 +65,7 @@ class STRClassifier:
         Returns:
         - List of tuples representing the start, end.
         """
-        repeat_regions = []
+        repeat_regions: List[Tuple[int, int, str]] = []
         file_path: Path = self.config.str_directory / f"result-{contig}.txt"
 
         with open(file_path, "r") as file:
@@ -92,7 +93,7 @@ class STRClassifier:
                     _, motif_sequence = motif_info.split("(")
                     motif_sequence = motif_sequence.strip(")")
 
-                    repeat_regions.append((start, end))
+                    repeat_regions.append((start, end, motif_sequence))
 
         return repeat_regions
 
@@ -121,6 +122,49 @@ class STRClassifier:
         candidate_end = self.ends[candidate_index]
 
         return candidate_start <= position <= candidate_end
+
+    def _find_region_index(self, position: int) -> int | None:
+        if not self.num_regions:
+            return None
+        idx = bisect.bisect_right(self.starts, position)
+        if idx == 0:
+            return None
+        candidate_index = idx - 1
+        if self.starts[candidate_index] <= position <= self.ends[candidate_index]:
+            return candidate_index
+        return None
+
+    def matches_rptrf_motif(self, position: int, contig_seq: str) -> bool:
+        region_index = self._find_region_index(position)
+        if region_index is None:
+            return False
+        motif = self.motifs[region_index]
+        if not motif:
+            return False
+        motif_len = len(motif)
+        if motif_len == 0:
+            return False
+
+        region_start = self.starts[region_index]
+        region_end = self.ends[region_index] + 1
+        start = max(region_start, position - motif_len)
+        end = min(region_end, position + motif_len)
+        if end - start < motif_len:
+            return False
+        window = contig_seq[start:end]
+        if not window:
+            return False
+
+        for offset in range(motif_len):
+            matched = True
+            for i, base in enumerate(window):
+                expected = motif[(i - offset) % motif_len]
+                if base != expected:
+                    matched = False
+                    break
+            if matched:
+                return True
+        return False
 
     def is_str_like(self, position: int, contig_seq: str) -> bool:
         if self.is_in_str(position):
