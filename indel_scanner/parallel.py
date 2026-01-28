@@ -106,6 +106,8 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     def format_worker_status() -> str:
         max_workers = 20
         columns = 4
+        contig_width = 14
+        cell_width = 26
         with active_lock:
             if not active_workers:
                 return "W: idle"
@@ -114,14 +116,16 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                 worker_id = name.split("-")[-1]
                 start_time = worker_start_times.get(name)
                 elapsed = time.monotonic() - start_time if start_time else 0.0
-                entries.append(f"W{worker_id} {contig} ({elapsed:.1f}s)")
+                contig_label = contig[:contig_width]
+                entries.append(f"W{worker_id:<2} {contig_label:<{contig_width}} {elapsed:>5.1f}s")
             if len(entries) > max_workers:
                 extra = len(entries) - max_workers
                 entries = entries[:max_workers]
                 entries.append(f"+{extra} more")
             rows = []
             for idx in range(0, len(entries), columns):
-                rows.append(" | ".join(entries[idx : idx + columns]))
+                row_cells = [cell.ljust(cell_width) for cell in entries[idx : idx + columns]]
+                rows.append(" | ".join(row_cells))
             return "\n".join(rows)
 
     def drain_status_queue():
@@ -150,7 +154,7 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
             while not stop_event.is_set():
                 drain_status_queue()
                 progress.update(task_id, worker_status=format_worker_status())
-                stop_event.wait(0.2)
+                stop_event.wait(1.0)
 
         status_thread = Thread(target=status_updater, daemon=True)
         status_thread.start()
