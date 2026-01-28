@@ -24,17 +24,34 @@ class ContigScanner:
     def __init__(self, config: PipelineConfig):
         self.config = config
 
+    @staticmethod
+    def _valid_read(read: pysam.AlignedSegment) -> bool:
+        return (
+            not read.is_unmapped
+            and not read.is_secondary
+            and not read.is_supplementary
+            and read.reference_name is not None
+            and read.query_name is not None
+            and read.query_sequence is not None
+            and read.query_qualities is not None
+        )
+
     def _parse_cigar_for_candidates(
         self,
         read: pysam.AlignedSegment,
         str_classifier: STRClassifier,
         contig_seq: str,
     ) -> Generator[IndelRecord, None, None]:
+        ref_name = read.reference_name
+        read_name = read.query_name
+        seq = read.query_sequence
+        qualities = read.query_qualities
+        if ref_name is None or read_name is None or seq is None or qualities is None:
+            return
         ref_pos_tracker = read.reference_start
         read_pos_tracker = 0
         if read.cigartuples is None:
             return
-        qualities = read.query_qualities
 
         for op_int, length in read.cigartuples:
             op = as_cigar(op_int)
@@ -44,31 +61,31 @@ class ContigScanner:
                     prefix_quality = None
                     indel_quality = None
                     suffix_quality = None
-                    if qualities is not None:
-                        flank_len = 5
-                        prefix_start = max(0, read_pos_tracker - flank_len)
-                        insertion_end = read_pos_tracker + length
-                        suffix_end = min(len(qualities), insertion_end + flank_len)
-                        prefix_quality = list(qualities[prefix_start:read_pos_tracker])
-                        indel_quality = list(qualities[read_pos_tracker:insertion_end])
-                        suffix_quality = list(qualities[insertion_end:suffix_end])
+                    flank_len = 5
+                    prefix_start = max(0, read_pos_tracker - flank_len)
+                    insertion_end = read_pos_tracker + length
+                    suffix_end = min(len(qualities), insertion_end + flank_len)
+                    prefix_quality = list(qualities[prefix_start:read_pos_tracker])
+                    indel_quality = list(qualities[read_pos_tracker:insertion_end])
+                    suffix_quality = list(qualities[insertion_end:suffix_end])
                     yield IndelRecord(
-                        contig=read.reference_name,
+                        contig=ref_name,
                         ref_position=ref_pos_tracker,
                         type=INDEL_TYPE.INSERTION,
                         length=length,
-                        prefix_context=read.query_sequence[
+                        prefix_context=seq[
                             max(0, read_pos_tracker - 5) : read_pos_tracker
                         ],
-                        suffix_context=read.query_sequence[
+                        suffix_context=seq[
                             read_pos_tracker + length : read_pos_tracker + length + 5
                         ],
-                        read_name=read.query_name,
+                        read_name=read_name,
+                        in_STR_region=str_classifier.is_in_str(ref_pos_tracker),
                         in_STR=str_classifier.matches_rptrf_motif(
                             ref_pos_tracker, contig_seq
                         ),
                         map_quality=read.mapping_quality,
-                        indel_content=read.query_sequence[
+                        indel_content=seq[
                             read_pos_tracker : read_pos_tracker + length
                         ],
                         prefix_quality=prefix_quality,
@@ -79,14 +96,13 @@ class ContigScanner:
                 if length >= self.config.min_indel_size:
                     prefix_quality = None
                     suffix_quality = None
-                    if qualities is not None:
-                        flank_len = 5
-                        prefix_start = max(0, read_pos_tracker - flank_len)
-                        suffix_end = min(len(qualities), read_pos_tracker + flank_len)
-                        prefix_quality = list(qualities[prefix_start:read_pos_tracker])
-                        suffix_quality = list(qualities[read_pos_tracker:suffix_end])
+                    flank_len = 5
+                    prefix_start = max(0, read_pos_tracker - flank_len)
+                    suffix_end = min(len(qualities), read_pos_tracker + flank_len)
+                    prefix_quality = list(qualities[prefix_start:read_pos_tracker])
+                    suffix_quality = list(qualities[read_pos_tracker:suffix_end])
                     yield IndelRecord(
-                        contig=read.reference_name,
+                        contig=ref_name,
                         ref_position=ref_pos_tracker,
                         type=INDEL_TYPE.DELETION,
                         length=length,
@@ -99,7 +115,8 @@ class ContigScanner:
                         suffix_context=contig_seq[
                             ref_pos_tracker + length : ref_pos_tracker + length + 5
                         ],
-                        read_name=read.query_name,
+                        read_name=read_name,
+                        in_STR_region=str_classifier.is_in_str(ref_pos_tracker),
                         in_STR=str_classifier.matches_rptrf_motif(
                             ref_pos_tracker, contig_seq
                         ),
@@ -121,12 +138,15 @@ class ContigScanner:
         str_classifier: STRClassifier,
         contig_seq: str,
     ) -> bool:
-        if read_pos >= len(read.query_qualities) - 1:
+        qualities = read.query_qualities
+        if qualities is None:
+            return False
+        if read_pos >= len(qualities) - 1:
             return False  # Cannot form a flank pair at the very end of a read.
 
         if (
-            read.query_qualities[read_pos] < self.config.min_flank_quality
-            or read.query_qualities[read_pos + 1] < self.config.min_flank_quality
+            qualities[read_pos] < self.config.min_flank_quality
+            or qualities[read_pos + 1] < self.config.min_flank_quality
         ):
             return False
 
@@ -148,15 +168,19 @@ class ContigScanner:
     ) -> bool:
         if read_pos is None or ref_pos is None:
             return False
-        if read.query_qualities is None:
+        qualities = read.query_qualities
+        if qualities is None:
             return False
-        if read.query_qualities[read_pos] < self.config.min_base_quality:
+        if qualities[read_pos] < self.config.min_base_quality:
             return False
-        if read_pos >= len(read.query_sequence):
+        seq = read.query_sequence
+        if seq is None:
+            return False
+        if read_pos >= len(seq):
             return False
         if ref_pos >= len(contig_seq):
             return False
-        read_base = read.query_sequence[read_pos]
+        read_base = seq[read_pos]
         ref_base = contig_seq[ref_pos]
         if read_base == "N" or ref_base == "N":
             return False
@@ -266,14 +290,7 @@ class ContigScanner:
         type_counts: dict[str, int] = {}
 
         for read in samfile.fetch(contig=contig_name):
-            if (
-                read.is_unmapped
-                or read.is_secondary
-                or read.is_supplementary
-                or read.mapping_quality < self.config.min_map_quality
-                or read.query_sequence is None
-                or read.query_qualities is None
-            ):
+            if not self._valid_read(read) or read.mapping_quality < self.config.min_map_quality:
                 continue
             reads_processed += 1
 

@@ -80,6 +80,7 @@ def insertion_instance() -> Insertion:
         suffix_context="TACC",
         read_name="read_1",
         type=INDEL_TYPE.INSERTION,
+        in_STR_region=False,
         in_STR=False,
         filter_mask=FilterFlag.NONE,
         map_quality=60,
@@ -101,6 +102,7 @@ def deletion_instance() -> Deletion:
         suffix_context="CCA",
         read_name="read_2",
         type=INDEL_TYPE.DELETION,
+        in_STR_region=True,
         in_STR=True,
         filter_mask=FilterFlag.NONE,
         map_quality=50,
@@ -127,12 +129,32 @@ def test_to_scanner_tsv_row(insertion_instance, deletion_instance):
     """Tests the to_scanner_tsv_row method for both Indel types."""
     # Test Insertion
     ins_row = IndelTsvFormatter.format_scanner_row(insertion_instance)
-    expected_ins = ["chr1", "100", "ins", "3", "GATT[ACA]TACC", "read_1", "False", ""]
+    expected_ins = [
+        "chr1",
+        "100",
+        "ins",
+        "3",
+        "GATT[ACA]TACC",
+        "read_1",
+        "False",
+        "False",
+        "",
+    ]
     assert ins_row == expected_ins
 
     # Test Deletion
     del_row = IndelTsvFormatter.format_scanner_row(deletion_instance)
-    expected_del = ["chr2", "200", "del", "2", "AAT[GG]CCA", "read_2", "True", ""]
+    expected_del = [
+        "chr2",
+        "200",
+        "del",
+        "2",
+        "AAT[GG]CCA",
+        "read_2",
+        "True",
+        "True",
+        "",
+    ]
     assert del_row == expected_del
 
 
@@ -146,6 +168,7 @@ def test_insertion_to_processor_tsv_row(insertion_instance):
         "3",
         "GATT[ACA]TACC",
         "read_1",
+        "False",
         "False",
         "",  # Scanner part
         "25,26,27,28",
@@ -166,6 +189,7 @@ def test_deletion_to_processor_tsv_row(deletion_instance):
         "2",
         "AAT[GG]CCA",
         "read_2",
+        "True",
         "True",
         "",  # Scanner part
         "20,21,22",
@@ -219,6 +243,7 @@ def test_should_filter_indel(prefix, indel, suffix, expected_filter):
         suffix_context=suffix,
         read_name="r1",
         type=INDEL_TYPE.INSERTION,
+        in_STR_region=False,
         in_STR=False,
         filter_mask=FilterFlag.NONE,
         map_quality=50,

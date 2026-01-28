@@ -32,6 +32,7 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
         pl.col("length"),
         pl.col("sequence_context_brackets").alias("[sequence]_context"),
         pl.col("read_name"),
+        pl.col("in_STR_region"),
         pl.col("in_STR"),
         pl.col("filter_reason").alias("filter_reason"),
         format_list_col("prefix_quality"),
@@ -115,6 +116,7 @@ def candidate_to_scanner_row(record: IndelRecord) -> List[str]:
         str(record.length),
         f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
         record.read_name,
+        str(record.in_STR_region),
         str(record.in_STR),
         "",
     ]
@@ -131,6 +133,7 @@ def passed_to_processor_row(record: IndelRecord) -> List[str]:
         str(record.length),
         f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
         record.read_name,
+        str(record.in_STR_region),
         str(record.in_STR),
         "",
         format_list(record.prefix_quality),

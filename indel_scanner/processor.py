@@ -61,8 +61,9 @@ class Processor:
                     length = int(row[3])
                     sequence_context = row[4]
                     read_name = row[5]
-                    in_str = row[6].lower() == "true"
-                    map_quality = int(row[8]) if len(row) > 8 and row[8] else None
+                    in_str_region = row[6].lower() == "true"
+                    in_str = row[7].lower() == "true"
+                    map_quality = int(row[12]) if len(row) > 12 and row[12] else None
                     prefix, indel_seq, suffix = self._parse_sequence_context(
                         sequence_context
                     )
@@ -83,6 +84,7 @@ class Processor:
                         read_name=read_name,
                         type=indel_type,
                         indel_content=indel_content,
+                        in_STR_region=in_str_region,
                         in_STR=in_str,
                         map_quality=map_quality,
                     )

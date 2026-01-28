@@ -10,6 +10,7 @@ class FilterableIndel(Protocol):
     type: INDEL_TYPE
     ref_position: int
     length: int
+    in_STR_region: bool
     in_STR: bool
     filter_mask: FilterFlag
     indel_quality: Optional[List[int]]
@@ -46,7 +47,7 @@ class IndelFilters:
     # ========================================================================
     @staticmethod
     def _is_in_str(indel: FilterableIndel, str_classifier: STRClassifier, **kwargs) -> None:
-        if indel.in_STR:
+        if indel.in_STR_region and not indel.in_STR:
             indel.filter_mask |= FilterFlag.IS_IN_STR
 
     @staticmethod

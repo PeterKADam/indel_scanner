@@ -20,6 +20,7 @@ class TSV_HEADERS(Enum):
         "length",
         "[sequence]_context",
         "read_name",
+        "in_STR_region",
         "in_STR",
         "filter_reason",
     ]
@@ -49,6 +50,7 @@ class IndelRecord:
     indel_content: str
     suffix_context: str
     read_name: str
+    in_STR_region: bool
     in_STR: bool
     map_quality: int
     type: INDEL_TYPE
@@ -87,6 +89,7 @@ class Indel(IndelRecord, ABC):
         indel_content: str,
         suffix_context: str,
         read_name: str,
+        in_STR_region: bool,
         in_STR: bool,
         map_quality: Optional[int],
         # Subclass-specific arguments
@@ -103,6 +106,7 @@ class Indel(IndelRecord, ABC):
             "indel_content": indel_content,
             "suffix_context": suffix_context,
             "read_name": read_name,
+            "in_STR_region": in_STR_region,
             "in_STR": in_STR,
             "map_quality": map_quality,
         }
@@ -155,6 +159,7 @@ class Insertion(Indel):
             "length": self.length,
             "sequence_context_brackets": self.sequencecontext_brackets(),
             "read_name": self.read_name,
+            "in_STR_region": self.in_STR_region,
             "in_STR": self.in_STR,
             "prefix_quality": self.prefix_quality,
             "insertion_quality": self.indel_quality,
@@ -178,6 +183,7 @@ class Deletion(Indel):
             "length": self.length,
             "sequence_context_brackets": self.sequencecontext_brackets(),
             "read_name": self.read_name,
+            "in_STR_region": self.in_STR_region,
             "in_STR": self.in_STR,
             "prefix_quality": self.prefix_quality,
             "insertion_quality": None,  # Deletions explicitly have no insertion quality
@@ -207,6 +213,7 @@ class IndelTsvFormatter:
             str(indel.length),
             indel.sequencecontext_brackets(),
             indel.read_name,
+            str(indel.in_STR_region),
             str(indel.in_STR),
             "",
         ]
