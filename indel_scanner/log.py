@@ -5,17 +5,18 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def setup_logging(log_dir: Path | None = None) -> None:
+def setup_logging(log_dir: Path | None = None, enable_console: bool = True) -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     for handler in list(root_logger.handlers):
         root_logger.removeHandler(handler)
 
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    console.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
-    root_logger.addHandler(console)
+    if enable_console:
+        console = logging.StreamHandler()
+        console.setLevel(logging.INFO)
+        console.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
+        root_logger.addHandler(console)
 
     if log_dir is not None:
         log_dir.mkdir(parents=True, exist_ok=True)

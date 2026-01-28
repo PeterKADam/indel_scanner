@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    setup_logging()
+    setup_logging(enable_console=False)
     config = Config.load()
-    setup_logging(config.log_dir)
+    setup_logging(config.log_dir, enable_console=False)
     config.write_settings_file()
     logger.info(f"Starting pipeline with {config.num_processes} workers...")
     passed_indels_path, total_interrogated_bases, stats = parallel_pipeline(config)
