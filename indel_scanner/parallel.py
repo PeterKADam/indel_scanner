@@ -99,6 +99,7 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     in_memory_records = []
 
     status_queue = Queue()
+    ui_queue = Queue()
     active_workers: dict[str, str] = {}
     worker_start_times: dict[str, float] = {}
     active_lock = Lock()
@@ -108,20 +109,18 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         columns = 4
         contig_width = 14
         cell_width = 26
+        display_workers = min(parallel_n, max_workers)
         with active_lock:
-            if not active_workers:
-                return "W: idle"
             entries = []
-            for name, contig in sorted(active_workers.items()):
-                worker_id = name.split("-")[-1]
-                start_time = worker_start_times.get(name)
+            for worker_id in range(1, display_workers + 1):
+                worker_key = str(worker_id)
+                contig = active_workers.get(worker_key, "idle")
+                start_time = worker_start_times.get(worker_key)
                 elapsed = time.monotonic() - start_time if start_time else 0.0
                 contig_label = contig[:contig_width]
-                entries.append(f"W{worker_id:<2} {contig_label:<{contig_width}} {elapsed:>5.1f}s")
-            if len(entries) > max_workers:
-                extra = len(entries) - max_workers
-                entries = entries[:max_workers]
-                entries.append(f"+{extra} more")
+                entries.append(
+                    f"W{worker_id:<2} {contig_label:<{contig_width}} {elapsed:>5.1f}s"
+                )
             rows = []
             for idx in range(0, len(entries), columns):
                 row_cells = [cell.ljust(cell_width) for cell in entries[idx : idx + columns]]
@@ -135,12 +134,13 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
             except Empty:
                 break
             with active_lock:
+                worker_id = worker_name.split("-")[-1]
                 if event == "start":
-                    active_workers[worker_name] = contig_name
-                    worker_start_times[worker_name] = time.monotonic()
+                    active_workers[worker_id] = contig_name
+                    worker_start_times[worker_id] = time.monotonic()
                 elif event == "done":
-                    active_workers.pop(worker_name, None)
-                    worker_start_times.pop(worker_name, None)
+                    active_workers.pop(worker_id, None)
+                    worker_start_times.pop(worker_id, None)
 
     with Progress(*progress_columns, transient=False) as progress:
         task_id = progress.add_task(
@@ -152,8 +152,20 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
 
         def status_updater():
             while not stop_event.is_set():
+                total_advance = 0
+                while True:
+                    try:
+                        event, value = ui_queue.get_nowait()
+                    except Empty:
+                        break
+                    if event == "advance":
+                        total_advance += int(value)
                 drain_status_queue()
-                progress.update(task_id, worker_status=format_worker_status())
+                progress.update(
+                    task_id,
+                    advance=total_advance,
+                    worker_status=format_worker_status(),
+                )
                 stop_event.wait(1.0)
 
         status_thread = Thread(target=status_updater, daemon=True)
@@ -207,7 +219,7 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                                     logger.warning(
                                         "In-memory limit exceeded; consider disabling in-memory mode."
                                     )
-                            progress.update(task_id, advance=1)
+                            ui_queue.put(("advance", 1))
         finally:
             stop_event.set()
             status_thread.join()
