@@ -155,21 +155,22 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                     active_workers.pop(worker_id, None)
                     worker_start_times.pop(worker_id, None)
 
-    progress = Progress(*progress_columns, transient=False, refresh_per_second=1)
+    progress = Progress(*progress_columns, transient=False, auto_refresh=False)
     stop_event = Event()
     quit_event = Event()
 
     def listen_for_quit():
-        if not sys.stdin.isatty():
+        stdin = sys.__stdin__
+        if stdin is None or not stdin.isatty():
             return
-        fd = sys.stdin.fileno()
+        fd = stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         try:
             tty.setcbreak(fd)
             while not stop_event.is_set():
-                rlist, _, _ = select.select([sys.stdin], [], [], 0.2)
+                rlist, _, _ = select.select([stdin], [], [], 0.2)
                 if rlist:
-                    char = sys.stdin.read(1)
+                    char = stdin.read(1)
                     if char.lower() == "q":
                         quit_event.set()
                         stop_event.set()
@@ -201,7 +202,6 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         Panel.fit(format_worker_table(), title="Workers", padding=(0, 1)),
     )
     with Live(group, refresh_per_second=1, transient=False) as live:
-        progress.start()
         task_id = progress.add_task(
             "[green]Scanning contigs...",
             total=len(contigs),
@@ -273,7 +273,6 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                 Panel.fit(format_worker_table(), title="Workers", padding=(0, 1)),
             )
             live.update(group, refresh=True)
-            progress.stop()
 
     if scannerconfig.in_memory:
         from .IO import write_passed_indels
