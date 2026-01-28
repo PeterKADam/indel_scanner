@@ -9,14 +9,18 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 from rich.live import Live
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
+from rich.console import Console, Group
 from multiprocessing import Pool, cpu_count, current_process, Queue
 import logging
 import time
 from threading import Event, Lock, Thread
 from queue import Empty
+import sys
+import select
+import termios
+import tty
 from .configurator import PipelineConfig
 from .scanner import ContigScanner
 from .IO import aggregate_tsv_parts, cleanup_temp_dir
@@ -109,10 +113,12 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
 
     def format_worker_table() -> Table:
         max_workers = 20
-        columns = 4
-        contig_width = 14
-        cell_width = 26
+        console_width = Console().size.width
+        min_cell_width = 24
+        columns = max(1, min(4, console_width // (min_cell_width + 3)))
         display_workers = min(parallel_n, max_workers)
+        cell_width = max(min_cell_width, (console_width // columns) - 3)
+        contig_width = max(8, cell_width - 12)
         table = Table.grid(padding=(0, 1))
         for _ in range(columns):
             table.add_column(no_wrap=True, width=cell_width)
@@ -122,10 +128,10 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                 worker_key = str(worker_id)
                 contig = active_workers.get(worker_key, "idle")
                 start_time = worker_start_times.get(worker_key)
-                elapsed = time.monotonic() - start_time if start_time else 0.0
+                elapsed = int(time.monotonic() - start_time) if start_time else 0
                 contig_label = contig[:contig_width]
                 entries.append(
-                    f"W{worker_id:<2} {contig_label:<{contig_width}} {elapsed:>5.1f}s"
+                    f"W{worker_id:<2} {contig_label:<{contig_width}} {elapsed:>5d}s"
                 )
         for idx in range(0, len(entries), columns):
             row_cells = [cell.ljust(cell_width) for cell in entries[idx : idx + columns]]
@@ -150,12 +156,26 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                     worker_start_times.pop(worker_id, None)
 
     progress = Progress(*progress_columns, transient=False, refresh_per_second=1)
-    layout = Layout()
-    layout.split_column(
-        Layout(name="progress", size=3),
-        Layout(name="workers"),
-    )
     stop_event = Event()
+    quit_event = Event()
+
+    def listen_for_quit():
+        if not sys.stdin.isatty():
+            return
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while not stop_event.is_set():
+                rlist, _, _ = select.select([sys.stdin], [], [], 0.2)
+                if rlist:
+                    char = sys.stdin.read(1)
+                    if char.lower() == "q":
+                        quit_event.set()
+                        stop_event.set()
+                        break
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
     def status_updater():
         while not stop_event.is_set():
@@ -169,18 +189,27 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                     total_advance += int(value)
             drain_status_queue()
             progress.update(task_id, advance=total_advance)
-            layout["progress"].update(Panel(progress, title="Progress", padding=(0, 1)))
-            layout["workers"].update(Panel(format_worker_table(), title="Workers", padding=(0, 1)))
+            group = Group(
+                Panel(progress, title="Progress", padding=(0, 1)),
+                Panel.fit(format_worker_table(), title="Workers", padding=(0, 1)),
+            )
+            live.update(group, refresh=True)
             stop_event.wait(1.0)
 
-    with Live(layout, refresh_per_second=1, transient=False):
+    group = Group(
+        Panel(progress, title="Progress", padding=(0, 1)),
+        Panel.fit(format_worker_table(), title="Workers", padding=(0, 1)),
+    )
+    with Live(group, refresh_per_second=1, transient=False) as live:
         progress.start()
         task_id = progress.add_task(
             "[green]Scanning contigs...",
             total=len(contigs),
         )
         status_thread = Thread(target=status_updater, daemon=True)
+        key_thread = Thread(target=listen_for_quit, daemon=True)
         status_thread.start()
+        key_thread.start()
         try:
             with Pool(
                 processes=parallel_n,
@@ -197,6 +226,9 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                     _process_contig_streaming, contigs)
                 with Timer("Parallel pipeline"):
                     for result in results_iterator:
+                        if quit_event.is_set():
+                            pool.terminate()
+                            break
                         if result:
                             contig_name, contig_records, contig_base_count, stats = result
                             total_interrogated_bases += contig_base_count
@@ -234,9 +266,13 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         finally:
             stop_event.set()
             status_thread.join()
+            key_thread.join(timeout=0.5)
             drain_status_queue()
-            layout["progress"].update(Panel(progress, title="Progress", padding=(0, 1)))
-            layout["workers"].update(Panel(format_worker_table(), title="Workers", padding=(0, 1)))
+            group = Group(
+                Panel(progress, title="Progress", padding=(0, 1)),
+                Panel.fit(format_worker_table(), title="Workers", padding=(0, 1)),
+            )
+            live.update(group, refresh=True)
             progress.stop()
 
     if scannerconfig.in_memory:
