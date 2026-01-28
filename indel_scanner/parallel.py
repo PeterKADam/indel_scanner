@@ -8,6 +8,10 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
+from rich.live import Live
+from rich.layout import Layout
+from rich.panel import Panel
+from rich.table import Table
 from multiprocessing import Pool, cpu_count, current_process, Queue
 import logging
 import time
@@ -83,7 +87,6 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         TextColumn("•"),
         TimeElapsedColumn(),
-        TextColumn("{task.fields[worker_status]}"),
     ]
 
     total_interrogated_bases = 0
@@ -104,12 +107,15 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     worker_start_times: dict[str, float] = {}
     active_lock = Lock()
 
-    def format_worker_status() -> str:
+    def format_worker_table() -> Table:
         max_workers = 20
         columns = 4
         contig_width = 14
         cell_width = 26
         display_workers = min(parallel_n, max_workers)
+        table = Table.grid(padding=(0, 1))
+        for _ in range(columns):
+            table.add_column(no_wrap=True, width=cell_width)
         with active_lock:
             entries = []
             for worker_id in range(1, display_workers + 1):
@@ -121,11 +127,12 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                 entries.append(
                     f"W{worker_id:<2} {contig_label:<{contig_width}} {elapsed:>5.1f}s"
                 )
-            rows = []
-            for idx in range(0, len(entries), columns):
-                row_cells = [cell.ljust(cell_width) for cell in entries[idx : idx + columns]]
-                rows.append(" | ".join(row_cells))
-            return "\n".join(rows)
+        for idx in range(0, len(entries), columns):
+            row_cells = [cell.ljust(cell_width) for cell in entries[idx : idx + columns]]
+            while len(row_cells) < columns:
+                row_cells.append("")
+            table.add_row(*row_cells)
+        return table
 
     def drain_status_queue():
         while True:
@@ -142,32 +149,36 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                     active_workers.pop(worker_id, None)
                     worker_start_times.pop(worker_id, None)
 
-    with Progress(*progress_columns, transient=False) as progress:
+    progress = Progress(*progress_columns, transient=False, refresh_per_second=1)
+    layout = Layout()
+    layout.split_column(
+        Layout(name="progress", size=3),
+        Layout(name="workers"),
+    )
+    stop_event = Event()
+
+    def status_updater():
+        while not stop_event.is_set():
+            total_advance = 0
+            while True:
+                try:
+                    event, value = ui_queue.get_nowait()
+                except Empty:
+                    break
+                if event == "advance":
+                    total_advance += int(value)
+            drain_status_queue()
+            progress.update(task_id, advance=total_advance)
+            layout["progress"].update(Panel(progress, title="Progress", padding=(0, 1)))
+            layout["workers"].update(Panel(format_worker_table(), title="Workers", padding=(0, 1)))
+            stop_event.wait(1.0)
+
+    with Live(layout, refresh_per_second=1, transient=False):
+        progress.start()
         task_id = progress.add_task(
             "[green]Scanning contigs...",
             total=len(contigs),
-            worker_status="W: idle",
         )
-        stop_event = Event()
-
-        def status_updater():
-            while not stop_event.is_set():
-                total_advance = 0
-                while True:
-                    try:
-                        event, value = ui_queue.get_nowait()
-                    except Empty:
-                        break
-                    if event == "advance":
-                        total_advance += int(value)
-                drain_status_queue()
-                progress.update(
-                    task_id,
-                    advance=total_advance,
-                    worker_status=format_worker_status(),
-                )
-                stop_event.wait(1.0)
-
         status_thread = Thread(target=status_updater, daemon=True)
         status_thread.start()
         try:
@@ -224,7 +235,9 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
             stop_event.set()
             status_thread.join()
             drain_status_queue()
-            progress.update(task_id, worker_status=format_worker_status())
+            layout["progress"].update(Panel(progress, title="Progress", padding=(0, 1)))
+            layout["workers"].update(Panel(format_worker_table(), title="Workers", padding=(0, 1)))
+            progress.stop()
 
     if scannerconfig.in_memory:
         from .IO import write_passed_indels
