@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 import polars as pl
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +67,15 @@ def write_per_type_mutation_report(
 ) -> Path:
     report_path = output_dir / report_filename
     passed_df = None
-    try:
-        passed_df = pl.read_csv(passed_indels_path, separator="\t")
-    except (FileNotFoundError, pl.exceptions.NoDataError):
+    if not passed_indels_path.exists():
         logger.warning(
             f"{passed_indels_path} not found or is empty. Assuming 0 passed indels."
         )
+    else:
+        try:
+            passed_df = pd.read_csv(passed_indels_path, sep="\t")
+        except Exception as e:
+            logger.error(f"Failed to read {passed_indels_path}: {e}")
 
     def bin_label(length: int) -> str:
         for bin_cfg in indel_bins:
@@ -85,37 +89,28 @@ def write_per_type_mutation_report(
             writer.writerow(
                 ["mutation_type", "str_class", "count", "callable_bases", "frequency"]
             )
-            if passed_df is None or passed_df.is_empty():
+            if passed_df is None or passed_df.empty:
                 return report_path
 
-            df = passed_df.with_columns(
-                [
-                    pl.when(pl.col("type") == "ins")
-                    .then("ins_")
-                    .otherwise("del_")
-                    .alias("type_prefix"),
-                    pl.col("length").apply(bin_label).alias("bin_label"),
-                    (pl.col("in_STR_region") & pl.col("in_STR"))
-                    .alias("str_motif"),
-                ]
-            ).with_columns(
-                (pl.col("type_prefix") + pl.col("bin_label")).alias("mutation_type")
-            )
+            df = passed_df.copy()
+            df["type_prefix"] = df["type"].map(lambda t: "ins_" if t == "ins" else "del_")
+            df["bin_label"] = df["length"].map(bin_label)
+            if "in_STR_region" in df.columns and "in_STR" in df.columns:
+                df["str_motif"] = df["in_STR_region"] & df["in_STR"]
+            else:
+                df["str_motif"] = False
+            df["mutation_type"] = df["type_prefix"] + df["bin_label"]
+            df["str_class"] = df["str_motif"].map(lambda v: "STR_motif" if v else "non_STR")
 
             grouped = (
-                df.group_by(["mutation_type", "str_motif"])
-                .len()
-                .with_columns(
-                    pl.when(pl.col("str_motif"))
-                    .then(pl.lit("STR_motif"))
-                    .otherwise(pl.lit("non_STR"))
-                    .alias("str_class")
-                )
+                df.groupby(["mutation_type", "str_class"])
+                .size()
+                .reset_index(name="count")
             )
 
-            for row in grouped.iter_rows(named=True):
+            for _, row in grouped.iterrows():
                 mutation_type = row["mutation_type"]
-                count = row["len"]
+                count = int(row["count"])
                 callable_bases = callable_bases_by_type.get(mutation_type, 0.0)
                 frequency = count / callable_bases if callable_bases > 0 else 0.0
                 writer.writerow(
