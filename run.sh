@@ -15,12 +15,6 @@ STR_DIR="/home/peterkad/pkadmaster/data/ph/repeatregions"
 # Pipeline configuration YAML
 CONFIG_FILE="config.yaml"
 
-#BAM_FILE_tr="/home/peterkad/pkadmaster/data/mutationalscanning_bam/tr/diploid_assembly/tr_plus_unmapped_diploid_v2.bam"
-#FASTA_FILE_tr="/home/peterkad/pkadmaster/data/tr/tr_diploid.fa"
-#OUTPUT_FILE_tr="/home/peterkad/pkadmaster/indel_scanner/results/test"
-#CONFIG_FILE="config.yaml"
-
-
 # Run the unified pipeline
 # This assumes you run it from the root of the 'indel_scanner' project directory
 python -m indel_scanner.main \
