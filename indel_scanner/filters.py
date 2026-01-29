@@ -1,9 +1,21 @@
 # indel_scanner/filters.py
 import logging
-from typing import Dict, Callable, Any, DefaultDict, List
+from typing import Dict, Callable, Any, DefaultDict, List, Protocol, Optional
 from .homopolymer_classifier import HomopolymerClassifier
 from .STR_Classifier import STRClassifier
-from .indel import INDEL_TYPE, Indel
+from .indel import INDEL_TYPE, FilterFlag
+
+
+class FilterableIndel(Protocol):
+    type: INDEL_TYPE
+    ref_position: int
+    length: int
+    in_STR_region: bool
+    in_STR: bool
+    filter_mask: FilterFlag
+    indel_quality: Optional[List[int]]
+    prefix_quality: Optional[List[int]]
+    suffix_quality: Optional[List[int]]
 
 logger = logging.getLogger(__name__)
 
@@ -34,37 +46,39 @@ class IndelFilters:
     # These methods operate on Indel objects for the 'process' stage.
     # ========================================================================
     @staticmethod
-    def _is_in_str(indel: Indel, str_classifier: STRClassifier, **kwargs) -> None:
-        if indel.in_STR:
-            indel.filter_reason.append("is_in_str")
+    def _is_in_str(indel: FilterableIndel, str_classifier: STRClassifier, **kwargs) -> None:
+        if indel.in_STR_region and not indel.in_STR:
+            indel.filter_mask |= FilterFlag.IS_IN_STR
 
     @staticmethod
-    def _is_homopolymer_or_adjacent(indel: Indel, **kwargs) -> None:
-        classifier = HomopolymerClassifier(indel)
+    def _is_homopolymer_or_adjacent(
+        indel: FilterableIndel, min_homopolymer_len: int = 3, **kwargs
+    ) -> None:
+        classifier = HomopolymerClassifier(indel, min_len=min_homopolymer_len)
         if classifier.should_filter_indel():
-            indel.filter_reason.append("is_homopolymer_context")
+            indel.filter_mask |= FilterFlag.IS_HOMOPOLYMER_CONTEXT
 
     @staticmethod
     def _similar_indels_in_other_reads(
-        indel: Indel, location_map: DefaultDict, **kwargs
+        indel: FilterableIndel, location_map: DefaultDict, **kwargs
     ) -> None:
         key = (indel.ref_position, indel.type, indel.length)
         # We check for > 1 because the current indel is already in the map
         if location_map.get(key, 0) > 1:
-            indel.filter_reason.append("similar_indels_in_other_reads")
+            indel.filter_mask |= FilterFlag.SIMILAR_IN_OTHER_READS
 
     @staticmethod
     def _low_minimum_indel_quality(
-        indel: Indel, min_quality: int = 93, **kwargs
+        indel: FilterableIndel, min_quality: int = 93, **kwargs
     ) -> None:
         if indel.type != INDEL_TYPE.INSERTION or not indel.indel_quality:
             return
         if min(indel.indel_quality) < min_quality:
-            indel.filter_reason.append("low_minimum_indel_quality")
+            indel.filter_mask |= FilterFlag.LOW_MINIMUM_INDEL_QUALITY
 
     @staticmethod
     def _low_singlebase_flanking_quality(
-        indel: Indel, min_flank_quality: int = 93, **kwargs
+        indel: FilterableIndel, min_flank_quality: int = 93, **kwargs
     ) -> None:
         if not indel.prefix_quality or not indel.suffix_quality:
             return
@@ -72,7 +86,7 @@ class IndelFilters:
             int(indel.prefix_quality[-1]) < min_flank_quality
             or int(indel.suffix_quality[0]) < min_flank_quality
         ):
-            indel.filter_reason.append("low_singlebase_flanking_quality")
+            indel.filter_mask |= FilterFlag.LOW_SINGLEBASE_FLANKING_QUALITY
 
     # ========================================================================
     # SECTION 3: APPLY FUNCTION (UNCHANGED)
@@ -87,7 +101,7 @@ class IndelFilters:
 
     @staticmethod
     def apply(
-        active_filters: List[Dict[str, Any]], indel: Indel, **context: Any
+        active_filters: List[Dict[str, Any]], indel: FilterableIndel, **context: Any
     ) -> None:
         for config in active_filters:
             filter_name = config.get("name")

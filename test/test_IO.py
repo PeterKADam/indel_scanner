@@ -3,7 +3,8 @@ import pytest
 from unittest.mock import Mock, mock_open
 from pathlib import Path
 
-from indel_scanner.IO import write_records_to_tsv, cleanup_temp_dir
+import csv
+from indel_scanner.IO import write_records_to_tsv, cleanup_temp_dir, aggregate_tsv_parts
 
 @pytest.fixture
 def mock_records():
@@ -194,3 +195,28 @@ class TestCleanup:
         mock_logger.debug.assert_called_once_with(
             f"Cleaning up temporary files in {temp_dir}"
         )
+
+
+def test_aggregate_tsv_parts_skips_headers(tmp_path):
+    parts_dir = tmp_path / "parts"
+    parts_dir.mkdir()
+    output_path = tmp_path / "final.tsv"
+    header = ["contig", "ref_position"]
+
+    part1 = parts_dir / "a.part.tsv"
+    part2 = parts_dir / "b.part.tsv"
+    with open(part1, "w", newline="") as f:
+        writer = csv.writer(f, delimiter="\t")
+        writer.writerow(header)
+        writer.writerow(["chr1", "100"])
+    with open(part2, "w", newline="") as f:
+        writer = csv.writer(f, delimiter="\t")
+        writer.writerow(header)
+        writer.writerow(["chr2", "200"])
+
+    aggregate_tsv_parts(parts_dir, output_path, header)
+
+    with open(output_path, "r", newline="") as f:
+        rows = list(csv.reader(f, delimiter="\t"))
+
+    assert rows == [header, ["chr1", "100"], ["chr2", "200"]]

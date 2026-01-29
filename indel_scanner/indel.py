@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum, StrEnum
+from enum import Enum, StrEnum, IntFlag
 from typing import List, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -20,23 +20,30 @@ class TSV_HEADERS(Enum):
         "length",
         "[sequence]_context",
         "read_name",
+        "in_STR_region",
         "in_STR",
+        "str_motif_length",
         "filter_reason",
-        "map_quality",
     ]
     PROCESSOR = SCANNER + [
         "prefix_quality",
         "insertion_quality",
         "suffix_quality",
+        "map_quality",
     ]
 
 
-@dataclass
-class Indel(ABC):
-    """
-    An abstract factory class representing a generic Insertion or Deletion.
-    """
+class FilterFlag(IntFlag):
+    NONE = 0
+    IS_IN_STR = 1 << 0
+    IS_HOMOPOLYMER_CONTEXT = 1 << 1
+    SIMILAR_IN_OTHER_READS = 1 << 2
+    LOW_MINIMUM_INDEL_QUALITY = 1 << 3
+    LOW_SINGLEBASE_FLANKING_QUALITY = 1 << 4
 
+
+@dataclass
+class IndelRecord:
     contig: str
     ref_position: int
     length: int
@@ -44,11 +51,33 @@ class Indel(ABC):
     indel_content: str
     suffix_context: str
     read_name: str
+    in_STR_region: bool
     in_STR: bool
     map_quality: int
-
     type: INDEL_TYPE
-    filter_reason: List[str] = field(default_factory=list)
+    filter_mask: FilterFlag = FilterFlag.NONE
+    motif_length: Optional[int] = None
+
+    def is_filtered(self) -> bool:
+        return self.filter_mask != FilterFlag.NONE
+    indel_quality: Optional[List[int]] = None
+    prefix_quality: Optional[List[int]] = None
+    suffix_quality: Optional[List[int]] = None
+
+    def sequencecontext_brackets(self) -> str:
+        """Returns the sequence context with brackets around the indel content."""
+        return f"{self.prefix_context}[{self.indel_content}]{self.suffix_context}"
+
+    def sequencecontext(self) -> str:
+        """Returns the full sequence context without brackets."""
+        return f"{self.prefix_context}{self.indel_content}{self.suffix_context}"
+
+
+@dataclass
+class Indel(IndelRecord, ABC):
+    """
+    An abstract factory class representing a generic Insertion or Deletion.
+    """
 
     @classmethod
     def create(
@@ -62,7 +91,9 @@ class Indel(ABC):
         indel_content: str,
         suffix_context: str,
         read_name: str,
+        in_STR_region: bool,
         in_STR: bool,
+        motif_length: Optional[int] = None,
         map_quality: Optional[int],
         # Subclass-specific arguments
         indel_quality: Optional[List[int]] = None,
@@ -78,7 +109,9 @@ class Indel(ABC):
             "indel_content": indel_content,
             "suffix_context": suffix_context,
             "read_name": read_name,
+            "in_STR_region": in_STR_region,
             "in_STR": in_STR,
+            "motif_length": motif_length,
             "map_quality": map_quality,
         }
         if type == INDEL_TYPE.INSERTION:
@@ -130,12 +163,14 @@ class Insertion(Indel):
             "length": self.length,
             "sequence_context_brackets": self.sequencecontext_brackets(),
             "read_name": self.read_name,
+            "in_STR_region": self.in_STR_region,
             "in_STR": self.in_STR,
+            "str_motif_length": self.motif_length,
             "prefix_quality": self.prefix_quality,
             "insertion_quality": self.indel_quality,
             "suffix_quality": self.suffix_quality,
             "map_quality": self.map_quality,
-            "filter_reason": self.filter_reason,
+            "filter_reason": "",
         }
 
 
@@ -153,12 +188,14 @@ class Deletion(Indel):
             "length": self.length,
             "sequence_context_brackets": self.sequencecontext_brackets(),
             "read_name": self.read_name,
+            "in_STR_region": self.in_STR_region,
             "in_STR": self.in_STR,
+            "str_motif_length": self.motif_length,
             "prefix_quality": self.prefix_quality,
             "insertion_quality": None,  # Deletions explicitly have no insertion quality
             "suffix_quality": self.suffix_quality,
             "map_quality": self.map_quality,
-            "filter_reason": self.filter_reason,
+            "filter_reason": "",
         }
 
 
@@ -182,9 +219,10 @@ class IndelTsvFormatter:
             str(indel.length),
             indel.sequencecontext_brackets(),
             indel.read_name,
+            str(indel.in_STR_region),
             str(indel.in_STR),
-            ",".join(indel.filter_reason) if indel.filter_reason else "NA",
-            str(indel.map_quality),
+            str(indel.motif_length) if indel.motif_length is not None else "NA",
+            "",
         ]
 
     @staticmethod

@@ -2,16 +2,35 @@
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open
 import pytest
-from indel_scanner.configurator import ScannerConfig
+from indel_scanner.configurator import PipelineConfig
 from indel_scanner.STR_Classifier import STRClassifier
 
 
-# A fixture to provide a mock ScannerConfig, avoiding repetition.
+# A fixture to provide a mock PipelineConfig, avoiding repetition.
 @pytest.fixture
 def mock_config(tmp_path):
-    """Provides a mock ScannerConfig pointing to a temporary directory."""
-    config = MagicMock(spec=ScannerConfig)
+    """Provides a mock PipelineConfig pointing to a temporary directory."""
+    config = MagicMock(spec=PipelineConfig)
     config.str_directory = tmp_path  # Use pytest's tmp_path for a realistic Path object
+    config.imperfect_str = {
+        "enabled": False,
+        "expand_bp": 0,
+        "window_bp": 20,
+        "motif_min": 2,
+        "motif_max": 6,
+        "max_mismatches": 2,
+    }
+    config.low_complexity = {
+        "enabled": False,
+        "window_bp": 32,
+        "entropy_threshold": 1.2,
+    }
+    config.repeat_run = {
+        "enabled": False,
+        "min_run_bp": 16,
+        "max_window_bp": 80,
+        "max_mismatches": 2,
+    }
     return config
 
 
@@ -41,10 +60,11 @@ Start End Len Motif Size( Sequence )
         # Assert: Check that the internal lists were populated correctly.
         # The line starting with '*' and 'Start' should be skipped.
         # The empty line should be skipped.
-        # The homopolymer '20(G)' at position 200 should be skipped.
-        assert classifier.starts == (77, 98, 128)
-        assert classifier.ends == (85, 115, 147)
-        assert classifier.num_regions == 3
+        # The homopolymer '20(G)' at position 200 is included in parsed regions.
+        assert classifier.starts == (77, 98, 200, 128)
+        assert classifier.ends == (85, 115, 220, 147)
+        assert classifier.motifs == ("TA", "ATTTAT", "G", "ATTTAT")
+        assert classifier.num_regions == 4
 
     def test_initialization_with_no_valid_regions(self, mocker, mock_config):
         """
@@ -52,11 +72,7 @@ Start End Len Motif Size( Sequence )
         WHEN STRClassifier is initialized
         THEN it should handle the empty case gracefully.
         """
-        fake_file_content = """
-Start   End     Length  Motif
-200     250     50      5(A)
-300     350     50      4(G)
-"""
+        fake_file_content = "Start End Len Motif Size( Sequence )\n"
         mocker.patch("builtins.open", mock_open(read_data=fake_file_content))
         classifier = STRClassifier(config=mock_config, contig="chr1")
 
@@ -106,17 +122,91 @@ Start   End     Length  Motif
         # For this test, it's easier to mock the method that produces the data
         # rather than the file read itself. This isolates the `is_in_str` logic.
         mocker.patch.object(STRClassifier, '_read_repeat_regions', return_value=[
-            (100, 200),
-            (300, 400)
+            (100, 200, "TA"),
+            (300, 400, "AC")
         ])
 
         classifier = STRClassifier(config=mock_config, contig="chr1")
 
         # We need to manually set these since we bypassed part of __init__
         classifier.starts, classifier.ends = zip(*[(100, 200), (300, 400)])
+        classifier.motifs = ("TA", "AC")
         classifier.num_regions = 2
 
         assert classifier.is_in_str(position) == expected_result
+
+    def test_imperfect_str_like_detection(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.imperfect_str["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = "GGGGGTATACGATATCCCC"
+        assert classifier.is_str_like(9, contig_seq)
+
+    def test_imperfect_str_like_with_flanks(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.imperfect_str["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = "GGGGGCACATACACACAGGGG"
+        assert classifier.is_str_like(12, contig_seq)
+
+    def test_imperfect_str_like_short_repeat_in_window(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.imperfect_str["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = "CACACACACACACATACACACACACACACACACACACACACACACACACACACAC"
+        assert classifier.is_str_like(20, contig_seq)
+
+    def test_imperfect_str_disabled(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.imperfect_str["enabled"] = False
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = "GGGGGTATACGATATCCCC"
+        assert not classifier.is_str_like(9, contig_seq)
+
+    def test_low_complexity_filter(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.low_complexity["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = (
+            "ATGGAGTGTATATATATATATATATATGGAGTATATATATATATAT"
+            "GGAGTATATATATATATGGAGTATATA"
+        )
+        assert classifier.is_str_like(20, contig_seq)
+
+    def test_repeat_run_detection(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[])
+        mock_config.repeat_run["enabled"] = True
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        contig_seq = (
+            "AGACGATTAACTAAAGATACACACACACACACACACACACACACACCCCAGGTAAA"
+        )
+        assert classifier.is_str_like(20, contig_seq)
+
+    def test_str_region_expansion(self, mocker, mock_config):
+        mock_config.imperfect_str["expand_bp"] = 10
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[(100, 110, "TA")])
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+
+        assert classifier.is_in_str(95)
+        assert classifier.is_in_str(120)
+
+    def test_matches_rptrf_motif_phase_aware(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[(0, 5, "TA")])
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+        contig_seq = "ATATAT"
+        assert classifier.matches_rptrf_motif(1, contig_seq)
+
+    def test_matches_rptrf_motif_no_match(self, mocker, mock_config):
+        mocker.patch.object(STRClassifier, "_read_repeat_regions", return_value=[(0, 5, "TA")])
+        classifier = STRClassifier(config=mock_config, contig="chr1")
+        contig_seq = "ACACAC"
+        assert not classifier.matches_rptrf_motif(1, contig_seq)
 
     def test_file_not_found(self, mocker, mock_config):
         """

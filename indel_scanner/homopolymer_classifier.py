@@ -6,9 +6,9 @@ logger = logging.getLogger(__name__)
 
 
 class HomopolymerClassifier:
-    def __init__(self, indel_obj: Indel):
+    def __init__(self, indel_obj: Indel, min_len: int = 3):
         self.indel_obj = indel_obj
-        self.min_len = 3  # Default min_len for Indel object analysis
+        self.min_len = min_len
 
     @staticmethod
     def is_position_in_homopolymer_context(
