@@ -190,16 +190,18 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                     total_advance += int(value)
             drain_status_queue()
             progress.update(task_id, advance=total_advance)
+            worker_title = f"Workers ({min(parallel_n, 20)}/{parallel_n})"
             group = Group(
                 Panel(progress, title="Progress", padding=(0, 1)),
-                Panel.fit(format_worker_table(), title="Workers", padding=(0, 1)),
+                Panel.fit(format_worker_table(), title=worker_title, padding=(0, 1)),
             )
             live.update(group, refresh=True)
             stop_event.wait(1.0)
 
+    worker_title = f"Workers ({min(parallel_n, 20)}/{parallel_n})"
     group = Group(
         Panel(progress, title="Progress", padding=(0, 1)),
-        Panel.fit(format_worker_table(), title="Workers", padding=(0, 1)),
+        Panel.fit(format_worker_table(), title=worker_title, padding=(0, 1)),
     )
     with Live(group, refresh_per_second=1, transient=False) as live:
         task_id = progress.add_task(
@@ -268,9 +270,10 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
             status_thread.join()
             key_thread.join(timeout=0.5)
             drain_status_queue()
+            worker_title = f"Workers ({min(parallel_n, 20)}/{parallel_n})"
             group = Group(
                 Panel(progress, title="Progress", padding=(0, 1)),
-                Panel.fit(format_worker_table(), title="Workers", padding=(0, 1)),
+                Panel.fit(format_worker_table(), title=worker_title, padding=(0, 1)),
             )
             live.update(group, refresh=True)
 
