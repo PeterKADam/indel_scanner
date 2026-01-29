@@ -38,7 +38,6 @@ DEFAULT_PROCESSOR: Dict[str, Any] = {
 }
 
 DEFAULT_REPORTING: Dict[str, Any] = {
-    "mutation_frequency_filename": "final_mutation_frequency.tsv",
     "per_type_frequency_filename": "per_type_mutation_frequency.tsv",
 }
 
@@ -140,7 +139,6 @@ class PipelineConfig:
         )
         self.processor_filters = self.processor["filters"]
 
-        self.report_filename = self.reporting["mutation_frequency_filename"]
         self.per_type_report_filename = self.reporting["per_type_frequency_filename"]
         self.in_memory: bool = self.pipeline["in_memory"]
         self.max_in_memory_records: int = self.pipeline["max_in_memory_records"]

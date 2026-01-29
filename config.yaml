@@ -26,7 +26,6 @@ processor:
         min_flank_quality: 93
 
 reporting:
-  mutation_frequency_filename: final_mutation_frequency.tsv
   per_type_frequency_filename: per_type_mutation_frequency.tsv
 
 io:

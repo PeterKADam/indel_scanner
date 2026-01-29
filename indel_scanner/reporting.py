@@ -58,21 +58,74 @@ def write_mutation_frequency_report(
 
 
 def write_per_type_mutation_report(
-    type_counts: dict,
+    passed_indels_path: Path,
     callable_bases_by_type: dict,
     output_dir: Path,
     report_filename: str,
+    indel_bins: list[dict],
 ) -> Path:
     report_path = output_dir / report_filename
+    passed_df = None
+    try:
+        passed_df = pl.read_csv(passed_indels_path, separator="\t")
+    except (FileNotFoundError, pl.exceptions.NoDataError):
+        logger.warning(
+            f"{passed_indels_path} not found or is empty. Assuming 0 passed indels."
+        )
+
+    def bin_label(length: int) -> str:
+        for bin_cfg in indel_bins:
+            if bin_cfg["min"] <= length <= bin_cfg["max"]:
+                return bin_cfg["label"]
+        return "indel_gt_10bp"
+
     try:
         with open(report_path, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t")
-            writer.writerow(["mutation_type", "count", "callable_bases", "frequency"])
-            for mutation_type, count in sorted(type_counts.items()):
+            writer.writerow(
+                ["mutation_type", "str_class", "count", "callable_bases", "frequency"]
+            )
+            if passed_df is None or passed_df.is_empty():
+                return report_path
+
+            df = passed_df.with_columns(
+                [
+                    pl.when(pl.col("type") == "ins")
+                    .then("ins_")
+                    .otherwise("del_")
+                    .alias("type_prefix"),
+                    pl.col("length").apply(bin_label).alias("bin_label"),
+                    (pl.col("in_STR_region") & pl.col("in_STR"))
+                    .alias("str_motif"),
+                ]
+            ).with_columns(
+                (pl.col("type_prefix") + pl.col("bin_label")).alias("mutation_type")
+            )
+
+            grouped = (
+                df.group_by(["mutation_type", "str_motif"])
+                .len()
+                .with_columns(
+                    pl.when(pl.col("str_motif"))
+                    .then(pl.lit("STR_motif"))
+                    .otherwise(pl.lit("non_STR"))
+                    .alias("str_class")
+                )
+            )
+
+            for row in grouped.iter_rows(named=True):
+                mutation_type = row["mutation_type"]
+                count = row["len"]
                 callable_bases = callable_bases_by_type.get(mutation_type, 0.0)
                 frequency = count / callable_bases if callable_bases > 0 else 0.0
                 writer.writerow(
-                    [mutation_type, count, f"{callable_bases:.0f}", f"{frequency:.10e}"]
+                    [
+                        mutation_type,
+                        row["str_class"],
+                        count,
+                        f"{callable_bases:.0f}",
+                        f"{frequency:.10e}",
+                    ]
                 )
         logger.info(f"Per-type mutation report written to {report_path}")
     except Exception as e:

@@ -15,7 +15,6 @@ def mock_main_dependencies(mocker):
         "setup_logging": mocker.patch("indel_scanner.main.setup_logging"),
         "Config_load": mocker.patch("indel_scanner.main.Config.load"),
         "parallel_pipeline": mocker.patch("indel_scanner.main.parallel_pipeline"),
-        "report": mocker.patch("indel_scanner.main.write_mutation_frequency_report"),
         "per_type_report": mocker.patch("indel_scanner.main.write_per_type_mutation_report"),
         "logger": mocker.patch("indel_scanner.main.logger"),
     }
@@ -32,7 +31,6 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
     mock_config.num_processes = 4
     mock_config.passed_indels_path = Path("out/processed/final_passed_indels.tsv")
     mock_config.output_path = Path("out")
-    mock_config.report_filename = "final_mutation_frequency.tsv"
     mock_config.per_type_report_filename = "per_type.tsv"
     mock_config.snp_label = "snp"
     mock_config.indel_bins = [
@@ -59,22 +57,8 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
     main.main()
 
     mock_main_dependencies["parallel_pipeline"].assert_called_once_with(mock_config)
-    mock_main_dependencies["report"].assert_called_once_with(
-        passed_indels_path=Path("out/processed/final_passed_indels.tsv"),
-        total_interrogated_bases=42,
-        output_dir=mock_config.output_path,
-        report_filename=mock_config.report_filename,
-    )
     mock_main_dependencies["per_type_report"].assert_called_once_with(
-        type_counts={
-            "snp": 1,
-            "ins_indel_1bp": 0,
-            "del_indel_1bp": 0,
-            "ins_indel_2_3bp": 0,
-            "del_indel_2_3bp": 0,
-            "ins_indel_4_10bp": 0,
-            "del_indel_4_10bp": 0,
-        },
+        passed_indels_path=Path("out/processed/final_passed_indels.tsv"),
         callable_bases_by_type={
             "snp": 20.0,
             "ins_indel_1bp": 10.0,
@@ -86,5 +70,6 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
         },
         output_dir=mock_config.output_path,
         report_filename=mock_config.per_type_report_filename,
+        indel_bins=mock_config.indel_bins,
     )
 

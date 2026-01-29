@@ -1,10 +1,7 @@
 import logging
 from indel_scanner.configurator import Config
 from indel_scanner.parallel import parallel_pipeline
-from indel_scanner.reporting import (
-    write_mutation_frequency_report,
-    write_per_type_mutation_report,
-)
+from indel_scanner.reporting import write_per_type_mutation_report
 from indel_scanner.log import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -26,14 +23,6 @@ def main():
         stats["reads"],
         stats["candidates"],
         stats["passed"],
-    )
-
-    logger.info("Calculating mutation frequency...")
-    write_mutation_frequency_report(
-        passed_indels_path=passed_indels_path,
-        total_interrogated_bases=total_interrogated_bases,
-        output_dir=config.output_path,
-        report_filename=config.report_filename,
     )
 
     sampling_total = stats["sampling_bases_total"]
@@ -65,10 +54,11 @@ def main():
     )
 
     write_per_type_mutation_report(
-        type_counts=type_counts,
+        passed_indels_path=passed_indels_path,
         callable_bases_by_type=callable_bases_by_type,
         output_dir=config.output_path,
         report_filename=config.per_type_report_filename,
+        indel_bins=config.indel_bins,
     )
 
 
