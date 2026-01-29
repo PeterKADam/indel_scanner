@@ -1,0 +1,67 @@
+scanner:
+  num_processes: 30          # Number of worker processes for contig scanning
+  min_indel_size: 1          # Minimum indel length to consider (bp)
+  preload_contigs: true      # deprecated
+  min_map_quality: 0        # Minimum read mapping quality
+  min_base_quality: 93       # Minimum base quality for SNP candidates
+  min_flank_quality: 93      # Minimum flank quality for indel/SNP callable bases
+  min_homopolymer_len: 3     # Homopolymer length threshold for filtering
+  temp_dir_name: temp_indel_parts  # Temp directory for intermediate files
+  output_filename: indel_scanner_results.tsv  # Scanner output filename (not used in run.sh)
+
+processor:
+  output_subdir: processed   # Output subdirectory under run output path
+  passed_indels_filename: final_passed_indels.tsv  # Final filtered indels TSV
+  filters:
+    - name: is_in_str         # Filter indels in STR regions without motif match
+    - name: is_homopolymer_context
+      params:
+        min_homopolymer_len: 3  # Homopolymer filter threshold
+    - name: similar_indels_in_other_reads  # Filter non-singleton indels by location
+    - name: low_minimum_indel_quality
+      params:
+        min_quality: 93       # Minimum base quality within insertion
+    - name: low_singlebase_flanking_quality
+      params:
+        min_flank_quality: 93  # Minimum base quality at immediate flanks
+
+reporting:
+  per_type_frequency_filename: per_type_mutation_frequency.tsv  # Per-type report TSV
+
+io:
+  write_buffer_size: 1000   # TSV write buffer size (rows)
+  read_batch_size: 10000    # TSV read batch size (rows)
+
+pipeline:
+  in_memory: false          # Write per-contig parts (false) or keep in memory (true)
+  max_in_memory_records: 500000  # Safety cap when in_memory=true
+  passed_parts_dir_name: temp_passed_indel_parts  # Temp dir for per-contig TSVs
+  sampling_bases: 1000000   # Bases sampled for callable-bases estimation
+  sampling_strategy: largest_contig  # Which contig to sample ("largest_contig" or first)
+  imperfect_str:
+    enabled: true           # Enable imperfect repeat detection
+    expand_bp: 0            # Expand STR intervals by this many bp
+    window_bp: 20           # Window size for imperfect STR detection
+    motif_min: 2            # Minimum motif length
+    motif_max: 6            # Maximum motif length
+    max_mismatches: 2       # Allowed mismatches within motif window
+  low_complexity:
+    enabled: true           # Enable low-complexity filtering
+    window_bp: 32           # Window size for entropy calculation
+    entropy_threshold: 1.2  # Shannon entropy cutoff
+  repeat_run:
+    enabled: true           # Enable repeat-run detection
+    min_run_bp: 16          # Minimum run length to flag
+    max_window_bp: 80       # Window size for repeat-run scan
+    max_mismatches: 2       # Allowed mismatches within run
+  snp_label: snp            # Label used for SNP counts in reports
+  indel_bins:
+    - label: indel_1bp
+      min: 1
+      max: 1
+    - label: indel_2_3bp
+      min: 2
+      max: 3
+    - label: indel_4_10bp
+      min: 4
+      max: 10
