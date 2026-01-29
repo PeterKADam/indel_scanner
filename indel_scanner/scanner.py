@@ -68,6 +68,7 @@ class ContigScanner:
                     prefix_quality = list(qualities[prefix_start:read_pos_tracker])
                     indel_quality = list(qualities[read_pos_tracker:insertion_end])
                     suffix_quality = list(qualities[insertion_end:suffix_end])
+                    indel_content = seq[read_pos_tracker : read_pos_tracker + length]
                     yield IndelRecord(
                         contig=ref_name,
                         ref_position=ref_pos_tracker,
@@ -81,13 +82,11 @@ class ContigScanner:
                         ],
                         read_name=read_name,
                         in_STR_region=str_classifier.is_in_str(ref_pos_tracker),
-                        in_STR=str_classifier.matches_rptrf_motif(
-                            ref_pos_tracker, contig_seq
+                        in_STR=str_classifier.matches_rptrf_motif_length(
+                            ref_pos_tracker, contig_seq, length, indel_content
                         ),
                         map_quality=read.mapping_quality,
-                        indel_content=seq[
-                            read_pos_tracker : read_pos_tracker + length
-                        ],
+                        indel_content=indel_content,
                         prefix_quality=prefix_quality,
                         indel_quality=indel_quality,
                         suffix_quality=suffix_quality,
@@ -101,6 +100,9 @@ class ContigScanner:
                     suffix_end = min(len(qualities), read_pos_tracker + flank_len)
                     prefix_quality = list(qualities[prefix_start:read_pos_tracker])
                     suffix_quality = list(qualities[read_pos_tracker:suffix_end])
+                    indel_content = contig_seq[
+                        ref_pos_tracker : ref_pos_tracker + length
+                    ]
                     yield IndelRecord(
                         contig=ref_name,
                         ref_position=ref_pos_tracker,
@@ -117,8 +119,8 @@ class ContigScanner:
                         ],
                         read_name=read_name,
                         in_STR_region=str_classifier.is_in_str(ref_pos_tracker),
-                        in_STR=str_classifier.matches_rptrf_motif(
-                            ref_pos_tracker, contig_seq
+                        in_STR=str_classifier.matches_rptrf_motif_length(
+                            ref_pos_tracker, contig_seq, length, indel_content
                         ),
                         map_quality=read.mapping_quality,
                         prefix_quality=prefix_quality,

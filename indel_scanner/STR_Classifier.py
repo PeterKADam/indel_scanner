@@ -134,6 +134,15 @@ class STRClassifier:
             return candidate_index
         return None
 
+    def motif_length_at(self, position: int) -> int | None:
+        region_index = self._find_region_index(position)
+        if region_index is None:
+            return None
+        motif = self.motifs[region_index]
+        if not motif:
+            return None
+        return len(motif)
+
     def matches_rptrf_motif(self, position: int, contig_seq: str) -> bool:
         region_index = self._find_region_index(position)
         if region_index is None:
@@ -159,6 +168,57 @@ class STRClassifier:
             matched = True
             for i, base in enumerate(window):
                 expected = motif[(i - offset) % motif_len]
+                if base != expected:
+                    matched = False
+                    break
+            if matched:
+                return True
+        return False
+
+    def matches_rptrf_motif_length(
+        self,
+        position: int,
+        contig_seq: str,
+        indel_length: int,
+        indel_seq: str | None = None,
+        allow_multiple: bool = True,
+    ) -> bool:
+        if indel_length <= 0:
+            return False
+        region_index = self._find_region_index(position)
+        if region_index is None:
+            return False
+        motif = self.motifs[region_index]
+        if not motif:
+            return False
+        motif_len = len(motif)
+        if motif_len <= 0:
+            return False
+        if not self.matches_rptrf_motif(position, contig_seq):
+            return False
+        if allow_multiple:
+            if indel_length % motif_len != 0:
+                return False
+        else:
+            if indel_length != motif_len:
+                return False
+        if indel_seq is None:
+            return False
+        return self._sequence_matches_motif(indel_seq, motif)
+
+    @staticmethod
+    def _sequence_matches_motif(indel_seq: str, motif: str) -> bool:
+        indel_seq = indel_seq.upper()
+        motif = motif.upper()
+        if not indel_seq or not motif:
+            return False
+        motif_len = len(motif)
+        if motif_len == 0 or len(indel_seq) % motif_len != 0:
+            return False
+        for offset in range(motif_len):
+            matched = True
+            for idx, base in enumerate(indel_seq):
+                expected = motif[(idx - offset) % motif_len]
                 if base != expected:
                     matched = False
                     break
