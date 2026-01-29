@@ -4,12 +4,15 @@
 # source /path/to/your/venv/bin/activate
 
 # Define input files and output location
+# BAM file (must be indexed with .bai)
 BAM_FILE="/home/peterkad/pkadmaster/data/mutationalscanning_bam/ph/diploid_assembly/ph_plus_unmapped_diploid_v2.bam"
+# Reference FASTA (must be indexed with .fai)
 FASTA_FILE="/home/peterkad/pkadmaster/data/ph/ph_diploid.fa"
 # Base results directory: output becomes {OUTPUT_FILE}/{sample}/{timestamp}/
 OUTPUT_FILE="/home/peterkad/pkadmaster/indel_scanner/results"
-# STR results directory for the sample
+# STR results directory for the sample (RPTRF output per contig)
 STR_DIR="/home/peterkad/pkadmaster/data/ph/repeatregions"
+# Pipeline configuration YAML
 CONFIG_FILE="config.yaml"
 
 #BAM_FILE_tr="/home/peterkad/pkadmaster/data/mutationalscanning_bam/tr/diploid_assembly/tr_plus_unmapped_diploid_v2.bam"

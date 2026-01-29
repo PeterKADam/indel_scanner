@@ -280,6 +280,9 @@ class ContigScanner:
         str_classifier: STRClassifier,
         length: int,
     ) -> bool:
+        motif_len = str_classifier.motif_length_at(ref_pos)
+        if motif_len is None or motif_len != length:
+            return False
         if read_pos is None or ref_pos is None:
             return False
         qualities = read.query_qualities
@@ -313,6 +316,9 @@ class ContigScanner:
         str_classifier: STRClassifier,
         length: int,
     ) -> bool:
+        motif_len = str_classifier.motif_length_at(ref_pos)
+        if motif_len is None or motif_len != length:
+            return False
         if read_pos is None or ref_pos is None:
             return False
         qualities = read.query_qualities
