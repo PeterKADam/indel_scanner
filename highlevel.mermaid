@@ -1,38 +1,75 @@
 graph TD;
-    subgraph "User Input"
-        A[BAM File]
-        B[FASTA File]
-        C[config.yaml]
+    subgraph "Invocation (run.sh)"
+        R0[run.sh] --> R1[python -m indel_scanner.main]
+        R0 --> R2[Defines BAM/FASTA/STR/output/config paths]
     end
 
-    subgraph "Core Logic: indel_scanner/"
-        D[main.py] -- Manages --> E[scanner_class.py]
-        E -- Defines --> F[ContigScanner Class]
+    subgraph "Inputs"
+        A[BAM (.bam/.bai)]
+        B[Reference FASTA]
+        C[config.yaml]
+        D[STR results dir]
+        E[CLI args]
+    end
+
+    subgraph "Core Modules: indel_scanner/"
+        F[main.py]
+        G[configurator.py]
+        H[parallel.py]
+        I[scanner.py]
+        J[filters.py]
+        K[STR_Classifier.py]
+        L[homopolymer_classifier.py]
+        M[IO.py]
+        N[indel.py]
+        O[reporting.py]
     end
 
     subgraph "Key Libraries"
-        H[pysam]
-        I[pyfastx]
-        J[PyYAML]
-        K[multiprocessing.Pool]
-        L[rich.progress]
-    end
-    
-    subgraph "File System I/O"
-        M[Partial .tsv Files]
-        N[Final Output .tsv]
+        P[pysam]
+        Q[pyfastx]
+        R[PyYAML]
+        S[multiprocessing.Pool]
+        T[rich.progress / rich.live]
+        U[polars / pandas]
     end
 
-    C -- Loaded by --> D;
-    D -- Uses --> L;
-    D -- Creates & Manages --> K;
-    K -- Executes --> F;
-    F -- Uses --> H;
-    F -- Uses --> I;
+    subgraph "Outputs"
+        V[settings_used.yaml]
+        W[passed_indels.tsv]
+        X[per_type_mutation_frequency.tsv]
+        Y[logs/]
+    end
 
-    A & B -- Read by --> F;
-    
-    F -- Writes --> N;
+    R1 --> F
+    R2 --> E
+    E --> G
+    C --> G
+    G --> F
+    G --> V
+    F --> H
+    H --> I
+    I --> J
+    I --> K
+    J --> L
+    I --> N
+    I --> M
+    H --> M
+    F --> O
 
-    style F fill:#f9f,stroke:#333,stroke-width:2px
-    style D fill:#ccf,stroke:#333,stroke-width:2px
+    A --> P
+    B --> Q
+    D --> K
+    G --> R
+    H --> S
+    H --> T
+    M --> U
+    O --> U
+
+    M --> W
+    O --> X
+    F --> Y
+
+    style R0 fill:#efe,stroke:#333,stroke-width:2px
+    style F fill:#ccf,stroke:#333,stroke-width:2px
+    style I fill:#f9f,stroke:#333,stroke-width:2px

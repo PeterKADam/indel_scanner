@@ -1,22 +1,29 @@
 flowchart TD
     subgraph setupPhase[Setup Phase]
-        A[Start] --> B[Parse CLI Arguments]
-        B --> C[Load config.yaml]
-        C --> D[Create run output directory]
-        D --> E[Read contig list from BAM header]
+        A[Parse CLI arguments] --> B[Config.load()]
+        B --> C[PipelineConfig: init + output dirs]
+        C --> D[Write settings_used.yaml]
+        D --> E[Setup logging]
+        E --> F[parallel_pipeline()]
     end
 
-    subgraph streamingPhase[Streaming Pipeline]
-        E --> F[Initialize ContigScanner]
-        F --> G[Create Multiprocessing Pool]
-        G --> H[Submit contig tasks]
-        H --> I[Process contig streaming scan+filter]
-        I --> J[Accumulate passed indels + stats]
-        J --> K[Write passed indels TSV]
+    subgraph streamingPhase[Parallel scanning]
+        F --> G[Read BAM header contigs]
+        G --> H[Pick sampling contig]
+        H --> I[Init worker: BAM + FASTA + config]
+        I --> J[scan_contig_streaming()]
+        J --> K[Parse CIGAR -> candidates]
+        K --> L[Apply IndelFilters]
+        L --> M[Collect stats + type counts]
+        M --> N{in_memory?}
+        N -- yes --> O[write_passed_indels()]
+        N -- no --> P[Write .part.tsv per contig]
+        P --> Q[aggregate_tsv_parts()]
+        Q --> R[cleanup_temp_dir()]
     end
 
     subgraph reportingPhase[Reporting]
-        K --> L[Write overall mutation frequency]
-        L --> M[Write per-type mutation frequency]
-        M --> N[End]
+        O --> S[write_per_type_mutation_report()]
+        R --> S
+        S --> T[per_type_mutation_frequency.tsv]
     end
