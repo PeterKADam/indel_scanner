@@ -69,6 +69,7 @@ class ContigScanner:
                     indel_quality = list(qualities[read_pos_tracker:insertion_end])
                     suffix_quality = list(qualities[insertion_end:suffix_end])
                     indel_content = seq[read_pos_tracker : read_pos_tracker + length]
+                    motif_length = str_classifier.motif_length_at(ref_pos_tracker)
                     yield IndelRecord(
                         contig=ref_name,
                         ref_position=ref_pos_tracker,
@@ -85,6 +86,7 @@ class ContigScanner:
                         in_STR=str_classifier.matches_rptrf_motif_length(
                             ref_pos_tracker, contig_seq, length, indel_content
                         ),
+                        motif_length=motif_length,
                         map_quality=read.mapping_quality,
                         indel_content=indel_content,
                         prefix_quality=prefix_quality,
@@ -103,6 +105,7 @@ class ContigScanner:
                     indel_content = contig_seq[
                         ref_pos_tracker : ref_pos_tracker + length
                     ]
+                    motif_length = str_classifier.motif_length_at(ref_pos_tracker)
                     yield IndelRecord(
                         contig=ref_name,
                         ref_position=ref_pos_tracker,
@@ -122,6 +125,7 @@ class ContigScanner:
                         in_STR=str_classifier.matches_rptrf_motif_length(
                             ref_pos_tracker, contig_seq, length, indel_content
                         ),
+                        motif_length=motif_length,
                         map_quality=read.mapping_quality,
                         prefix_quality=prefix_quality,
                         suffix_quality=suffix_quality,
@@ -267,6 +271,68 @@ class ContigScanner:
             return False
         return True
 
+    def _is_callable_for_insertion_length_str(
+        self,
+        read: pysam.AlignedSegment,
+        read_pos: int,
+        ref_pos: int,
+        contig_seq: str,
+        str_classifier: STRClassifier,
+        length: int,
+    ) -> bool:
+        if read_pos is None or ref_pos is None:
+            return False
+        qualities = read.query_qualities
+        if qualities is None:
+            return False
+        if read_pos <= 0 or read_pos + length >= len(qualities):
+            return False
+        if (
+            qualities[read_pos - 1] < self.config.min_flank_quality
+            or qualities[read_pos] < self.config.min_flank_quality
+        ):
+            return False
+        insertion_window = qualities[read_pos : read_pos + length]
+        min_quality = self._get_processor_min_quality()
+        if insertion_window and min(insertion_window) < min_quality:
+            return False
+        if not str_classifier.matches_rptrf_motif(ref_pos, contig_seq):
+            return False
+        if IndelFilters.check_if_homopolymer_context(
+            contig_seq, ref_pos, self.config.min_homopolymer_len
+        ):
+            return False
+        return True
+
+    def _is_callable_for_deletion_length_str(
+        self,
+        read: pysam.AlignedSegment,
+        read_pos: int,
+        ref_pos: int,
+        contig_seq: str,
+        str_classifier: STRClassifier,
+        length: int,
+    ) -> bool:
+        if read_pos is None or ref_pos is None:
+            return False
+        qualities = read.query_qualities
+        if qualities is None:
+            return False
+        if read_pos <= 0 or read_pos >= len(qualities):
+            return False
+        if (
+            qualities[read_pos - 1] < self.config.min_flank_quality
+            or qualities[read_pos] < self.config.min_flank_quality
+        ):
+            return False
+        if not str_classifier.matches_rptrf_motif(ref_pos, contig_seq):
+            return False
+        if IndelFilters.check_if_homopolymer_context(
+            contig_seq, ref_pos, self.config.min_homopolymer_len
+        ):
+            return False
+        return True
+
     def scan_contig_streaming(
         self,
         contig_name: str,
@@ -281,6 +347,7 @@ class ContigScanner:
         total_aligned_bases = 0
         sampling_bases_total = 0
         sampling_passable_by_type: dict[str, int] = {}
+        sampling_passable_by_motif: dict[str, int] = {}
         sampling_active = (
             self.config.sampling_strategy == "largest_contig"
             and contig_name == self.config.sampling_contig
@@ -339,6 +406,33 @@ class ContigScanner:
                                 sampling_passable_by_type.get(del_label, 0) + 1
                             )
 
+                    motif_len = str_classifier.motif_length_at(ref_pos)
+                    if motif_len:
+                        if self._is_callable_for_insertion_length_str(
+                            read,
+                            read_pos,
+                            ref_pos,
+                            contig_seq,
+                            str_classifier,
+                            motif_len,
+                        ):
+                            key = f"ins_motif_{motif_len}bp"
+                            sampling_passable_by_motif[key] = (
+                                sampling_passable_by_motif.get(key, 0) + 1
+                            )
+                        if self._is_callable_for_deletion_length_str(
+                            read,
+                            read_pos,
+                            ref_pos,
+                            contig_seq,
+                            str_classifier,
+                            motif_len,
+                        ):
+                            key = f"del_motif_{motif_len}bp"
+                            sampling_passable_by_motif[key] = (
+                                sampling_passable_by_motif.get(key, 0) + 1
+                            )
+
                 if is_callable and self._is_snp_candidate(
                     read, read_pos, ref_pos, contig_seq
                 ):
@@ -380,6 +474,7 @@ class ContigScanner:
             "total_aligned_bases": total_aligned_bases,
             "sampling_bases_total": sampling_bases_total,
             "sampling_passable_by_type": sampling_passable_by_type,
+            "sampling_passable_by_motif": sampling_passable_by_motif,
             "sampled_contig": sampled_contig,
             "type_counts": type_counts,
             "elapsed_s": end_time - start_time,

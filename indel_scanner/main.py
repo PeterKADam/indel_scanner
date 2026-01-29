@@ -35,6 +35,16 @@ def main():
         else:
             callable_bases_by_type[mutation_type] = 0.0
 
+    for mutation_type, passable_count in stats.get(
+        "sampling_passable_by_motif", {}
+    ).items():
+        if sampling_total > 0:
+            callable_bases_by_type[mutation_type] = (
+                passable_count / sampling_total
+            ) * stats["total_aligned_bases"]
+        else:
+            callable_bases_by_type[mutation_type] = 0.0
+
     type_counts = dict(stats["type_counts"])
     type_counts.setdefault(config.snp_label, 0)
     if config.snp_label not in callable_bases_by_type:

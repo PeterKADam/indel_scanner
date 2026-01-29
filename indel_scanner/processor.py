@@ -63,7 +63,18 @@ class Processor:
                     read_name = row[5]
                     in_str_region = row[6].lower() == "true"
                     in_str = row[7].lower() == "true"
-                    map_quality = int(row[12]) if len(row) > 12 and row[12] else None
+                    motif_length = None
+                    if len(row) > 8 and row[8] and row[8] != "NA":
+                        try:
+                            motif_length = int(row[8])
+                        except ValueError:
+                            motif_length = None
+                    map_quality_idx = 13 if len(row) > 13 else 12
+                    map_quality = (
+                        int(row[map_quality_idx])
+                        if len(row) > map_quality_idx and row[map_quality_idx]
+                        else None
+                    )
                     prefix, indel_seq, suffix = self._parse_sequence_context(
                         sequence_context
                     )
@@ -86,6 +97,7 @@ class Processor:
                         indel_content=indel_content,
                         in_STR_region=in_str_region,
                         in_STR=in_str,
+                        motif_length=motif_length,
                         map_quality=map_quality,
                     )
                     if indel_obj:

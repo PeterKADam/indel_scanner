@@ -34,6 +34,7 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
         pl.col("read_name"),
         pl.col("in_STR_region"),
         pl.col("in_STR"),
+        pl.col("str_motif_length"),
         pl.col("filter_reason").alias("filter_reason"),
         format_list_col("prefix_quality"),
         format_list_col(
@@ -118,6 +119,7 @@ def candidate_to_scanner_row(record: IndelRecord) -> List[str]:
         record.read_name,
         str(record.in_STR_region),
         str(record.in_STR),
+        str(record.motif_length) if record.motif_length is not None else "NA",
         "",
     ]
 
@@ -135,6 +137,7 @@ def passed_to_processor_row(record: IndelRecord) -> List[str]:
         record.read_name,
         str(record.in_STR_region),
         str(record.in_STR),
+        str(record.motif_length) if record.motif_length is not None else "NA",
         "",
         format_list(record.prefix_quality),
         format_list(record.indel_quality),

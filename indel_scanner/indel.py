@@ -22,6 +22,7 @@ class TSV_HEADERS(Enum):
         "read_name",
         "in_STR_region",
         "in_STR",
+        "str_motif_length",
         "filter_reason",
     ]
     PROCESSOR = SCANNER + [
@@ -55,6 +56,7 @@ class IndelRecord:
     map_quality: int
     type: INDEL_TYPE
     filter_mask: FilterFlag = FilterFlag.NONE
+    motif_length: Optional[int] = None
 
     def is_filtered(self) -> bool:
         return self.filter_mask != FilterFlag.NONE
@@ -91,6 +93,7 @@ class Indel(IndelRecord, ABC):
         read_name: str,
         in_STR_region: bool,
         in_STR: bool,
+        motif_length: Optional[int] = None,
         map_quality: Optional[int],
         # Subclass-specific arguments
         indel_quality: Optional[List[int]] = None,
@@ -108,6 +111,7 @@ class Indel(IndelRecord, ABC):
             "read_name": read_name,
             "in_STR_region": in_STR_region,
             "in_STR": in_STR,
+            "motif_length": motif_length,
             "map_quality": map_quality,
         }
         if type == INDEL_TYPE.INSERTION:
@@ -161,6 +165,7 @@ class Insertion(Indel):
             "read_name": self.read_name,
             "in_STR_region": self.in_STR_region,
             "in_STR": self.in_STR,
+            "str_motif_length": self.motif_length,
             "prefix_quality": self.prefix_quality,
             "insertion_quality": self.indel_quality,
             "suffix_quality": self.suffix_quality,
@@ -185,6 +190,7 @@ class Deletion(Indel):
             "read_name": self.read_name,
             "in_STR_region": self.in_STR_region,
             "in_STR": self.in_STR,
+            "str_motif_length": self.motif_length,
             "prefix_quality": self.prefix_quality,
             "insertion_quality": None,  # Deletions explicitly have no insertion quality
             "suffix_quality": self.suffix_quality,
@@ -215,6 +221,7 @@ class IndelTsvFormatter:
             indel.read_name,
             str(indel.in_STR_region),
             str(indel.in_STR),
+            str(indel.motif_length) if indel.motif_length is not None else "NA",
             "",
         ]
 
