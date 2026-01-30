@@ -58,6 +58,39 @@ def write_mutation_frequency_report(
     }
 
 
+def build_callable_bases_by_type(
+    stats: dict,
+    snp_label: str,
+) -> dict[str, float]:
+    sampling_total = stats["sampling_bases_total"]
+    sampling_totals_by_type = stats.get("sampling_totals_by_type")
+    callable_bases_by_type: dict[str, float] = {}
+    for mutation_type, passable_count in stats["sampling_passable_by_type"].items():
+        sampling_total_for_type = (
+            sampling_totals_by_type.get(mutation_type, sampling_total)
+            if sampling_totals_by_type
+            else sampling_total
+        )
+        if sampling_total_for_type > 0:
+            callable_bases_by_type[mutation_type] = (
+                passable_count / sampling_total_for_type
+            ) * stats["total_aligned_bases"]
+        else:
+            callable_bases_by_type[mutation_type] = 0.0
+
+    tract_counts_by_motif = stats.get("tract_counts_by_motif", {})
+    for motif_len, tract_count in tract_counts_by_motif.items():
+        key_ins = f"ins_motif_{motif_len}bp"
+        key_del = f"del_motif_{motif_len}bp"
+        callable_bases_by_type[key_ins] = float(tract_count)
+        callable_bases_by_type[key_del] = float(tract_count)
+
+    if snp_label not in callable_bases_by_type:
+        callable_bases_by_type[snp_label] = 0.0
+
+    return callable_bases_by_type
+
+
 def write_per_type_mutation_report(
     passed_indels_path: Path,
     callable_bases_by_type: dict,

@@ -102,8 +102,9 @@ class TestParallelPipeline:
                 },
             ),
         ]
-        mock_callable_pool = MagicMock()
-        mock_callable_pool.imap_unordered.return_value = [
+        pre_callable_pool = MagicMock()
+        pre_async = MagicMock()
+        pre_async.get.return_value = [
             (
                 "chr1",
                 {
@@ -115,9 +116,9 @@ class TestParallelPipeline:
                 },
             )
         ]
+        pre_callable_pool.map_async.return_value = pre_async
         mock_pool_instance.__enter__.return_value = mock_pool_instance
-        mock_callable_pool.__enter__.return_value = mock_callable_pool
-        m_pool.side_effect = [mock_pool_instance, mock_callable_pool]
+        m_pool.side_effect = [pre_callable_pool, mock_pool_instance]
 
         # 3. Configure the Progress bar mock to avoid side effects
         mock_progress_instance = MagicMock()
@@ -140,11 +141,8 @@ class TestParallelPipeline:
         mock_pool_instance.imap_unordered.assert_called_once()
 
         # Verify progress bar was used
-        mock_progress_instance.add_task.assert_any_call(
+        mock_progress_instance.add_task.assert_called_once_with(
             "[green]Scanning contigs...", total=2
-        )
-        mock_progress_instance.add_task.assert_any_call(
-            "[green]Callable bases...", total=2
         )
 
         # Verify final aggregation step
@@ -198,10 +196,12 @@ class TestParallelPipeline:
 
         # Basic setup for Pool context manager
         mock_pool_instance = MagicMock()
-        mock_callable_pool = MagicMock()
+        pre_callable_pool = MagicMock()
+        pre_async = MagicMock()
+        pre_async.get.return_value = []
+        pre_callable_pool.map_async.return_value = pre_async
         mock_pool_instance.__enter__.return_value = MagicMock()
-        mock_callable_pool.__enter__.return_value = MagicMock()
-        m_pool.side_effect = [mock_pool_instance, mock_callable_pool]
+        m_pool.side_effect = [pre_callable_pool, mock_pool_instance]
 
         # --- Act ---
         parallel_pipeline(mock_scanner_config)

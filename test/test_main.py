@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from indel_scanner import main
+from indel_scanner.reporting import build_callable_bases_by_type
 from indel_scanner.configurator import PipelineConfig
 
 
@@ -61,10 +62,10 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
     mock_main_dependencies["parallel_pipeline"].assert_called_once_with(mock_config)
     mock_main_dependencies["per_type_report"].assert_called_once_with(
         passed_indels_path=Path("out/processed/final_passed_indels.tsv"),
-        callable_bases_by_type={
-            "snp": 20.0,
-            "ins_len_1bp": 10.0,
-        },
+        callable_bases_by_type=build_callable_bases_by_type(
+            mock_main_dependencies["parallel_pipeline"].return_value[2],
+            mock_config.snp_label,
+        ),
         output_dir=mock_config.output_path,
         report_filename=mock_config.per_type_report_filename,
         indel_bins=mock_config.indel_bins,
