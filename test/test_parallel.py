@@ -31,6 +31,7 @@ class TestParallelPipeline:
         config.sampling_top_n_contigs = 10
         config.sampling_random_seed = 1
         config.callable_lengths = [1, 2, 3]
+        config.test_run = False
         return config
 
     def test_parallel_pipeline_happy_path(self, mocker, mock_scanner_config):

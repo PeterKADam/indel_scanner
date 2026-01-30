@@ -178,6 +178,8 @@ class PipelineConfig:
         self.sampling_contig_targets: dict[str, int] = {}
         self.callable_lengths: list[int] = []
         self.contigs = self._parse_contigs(self.args.contigs, self.scanner.get("contigs"))
+        self.test_run: bool = bool(getattr(self.args, "test_run", False))
+        self.test_contigs_count: int = 10
 
         self._setup_output()
 
@@ -295,6 +297,11 @@ class Config:
             "--contigs",
             default=None,
             help="Comma-separated list of contigs to process (default: all).",
+        )
+        parser.add_argument(
+            "--test-run",
+            action="store_true",
+            help="Run on ~10 contigs around median length for quick testing.",
         )
         return parser.parse_args()
 

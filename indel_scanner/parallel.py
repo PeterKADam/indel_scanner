@@ -124,6 +124,21 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         contig_lookup = dict(zip(contigs, contig_lengths))
         contigs = [c for c in contigs if c in contig_filter]
         contig_lengths = [contig_lookup[c] for c in contigs]
+    if getattr(scannerconfig, "test_run", False) and contigs:
+        contig_pairs = sorted(zip(contigs, contig_lengths), key=lambda x: x[1])
+        target_count = min(
+            len(contig_pairs), int(getattr(scannerconfig, "test_contigs_count", 10))
+        )
+        midpoint = len(contig_pairs) // 2
+        start = max(0, midpoint - target_count // 2)
+        end = start + target_count
+        contig_pairs = contig_pairs[start:end]
+        contigs = [c for c, _ in contig_pairs]
+        contig_lengths = [l for _, l in contig_pairs]
+        logger.info(
+            "Test run enabled: selected %s contigs around median length.",
+            len(contigs),
+        )
     if contigs:
         contig_pairs = sorted(
             zip(contigs, contig_lengths), key=lambda x: x[1], reverse=True
