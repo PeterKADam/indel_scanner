@@ -197,6 +197,8 @@ class ContigScanner:
                         ):
                             continue
                     motif_length = str_classifier.motif_length_at(ref_pos_tracker)
+                    if motif_length == 1:
+                        str_motif_match = False
                     yield IndelRecord(
                         contig=ref_name,
                         ref_position=ref_pos_tracker,
@@ -286,6 +288,8 @@ class ContigScanner:
                         ):
                             continue
                     motif_length = str_classifier.motif_length_at(ref_pos_tracker)
+                    if motif_length == 1:
+                        str_motif_match = False
                     yield IndelRecord(
                         contig=ref_name,
                         ref_position=ref_pos_tracker,
