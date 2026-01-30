@@ -54,6 +54,15 @@ pipeline:
     min_run_bp: 16          # Minimum run length to flag
     max_window_bp: 80       # Window size for repeat-run scan
     max_mismatches: 2       # Allowed mismatches within run
+  str_candidate_filter:
+    enabled: true           # Drop STR-like indels near RPTRF tracts
+    min_repeat_units: 3     # Minimum repeat units to qualify
+    window_bp: 100          # Distance from RPTRF tract to filter
+    local_window_bp: 30     # Window around indel to detect repeat runs
+    max_motif_len: 6        # Max motif length to consider for repeat runs
+    aggressive: true        # Apply extra repeat filtering
+    aggressive_min_repeat_units: 2  # More sensitive repeat detection
+    aggressive_max_motif_len: 12    # Detect longer repeat motifs
   snp_label: snp            # Label used for SNP counts in reports
   indel_bins:
     - label: indel_1bp

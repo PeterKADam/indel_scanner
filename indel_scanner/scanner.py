@@ -148,7 +148,11 @@ class ContigScanner:
                             ref_pos_tracker, window_bp
                         ):
                             continue
-                        if str_classifier.is_str_like(ref_pos_tracker, contig_seq):
+                        check_positions = {ref_pos_tracker, max(0, ref_pos_tracker - 1)}
+                        if any(
+                            str_classifier.is_str_like(pos, contig_seq)
+                            for pos in check_positions
+                        ):
                             continue
                         motif_len = self._repeat_unit_length(
                             indel_content, int(filter_cfg.get("min_repeat_units", 3))
@@ -163,6 +167,21 @@ class ContigScanner:
                             int(filter_cfg.get("min_repeat_units", 3)),
                             max_motif_len,
                         )
+                        if filter_cfg.get("aggressive", False):
+                            aggressive_min_units = int(
+                                filter_cfg.get("aggressive_min_repeat_units", 2)
+                            )
+                            aggressive_max_motif_len = int(
+                                filter_cfg.get("aggressive_max_motif_len", max_motif_len)
+                            )
+                            if self._has_repeat_run(
+                                local_seq, aggressive_min_units, aggressive_max_motif_len
+                            ) or self._has_repeat_run(
+                                indel_content,
+                                aggressive_min_units,
+                                aggressive_max_motif_len,
+                            ):
+                                continue
                         if (
                             motif_len is not None
                             or has_repeat_in_indel
@@ -216,7 +235,10 @@ class ContigScanner:
                             ref_pos_tracker, window_bp
                         ):
                             continue
-                        if str_classifier.is_str_like(ref_pos_tracker, contig_seq):
+                        end_pos = ref_pos_tracker + max(0, length - 1)
+                        if str_classifier.is_str_like(
+                            ref_pos_tracker, contig_seq
+                        ) or str_classifier.is_str_like(end_pos, contig_seq):
                             continue
                         motif_len = self._repeat_unit_length(
                             indel_content, int(filter_cfg.get("min_repeat_units", 3))
@@ -231,6 +253,21 @@ class ContigScanner:
                             int(filter_cfg.get("min_repeat_units", 3)),
                             max_motif_len,
                         )
+                        if filter_cfg.get("aggressive", False):
+                            aggressive_min_units = int(
+                                filter_cfg.get("aggressive_min_repeat_units", 2)
+                            )
+                            aggressive_max_motif_len = int(
+                                filter_cfg.get("aggressive_max_motif_len", max_motif_len)
+                            )
+                            if self._has_repeat_run(
+                                local_seq, aggressive_min_units, aggressive_max_motif_len
+                            ) or self._has_repeat_run(
+                                indel_content,
+                                aggressive_min_units,
+                                aggressive_max_motif_len,
+                            ):
+                                continue
                         if (
                             motif_len is not None
                             or has_repeat_in_indel

@@ -27,7 +27,7 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
 
     final_df = df.select(
         pl.col("contig"),
-        (pl.col("ref_position") + 1).alias("ref_position"),
+        pl.col("ref_position"),
         pl.col("type"),
         pl.col("length"),
         pl.col("sequence_context_brackets").alias("[sequence]_context"),
@@ -112,7 +112,7 @@ def write_records_to_tsv(
 def candidate_to_scanner_row(record: IndelRecord) -> List[str]:
     return [
         record.contig,
-        str(record.ref_position + 1),
+        str(record.ref_position),
         record.type.value,
         str(record.length),
         f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
@@ -130,7 +130,7 @@ def passed_to_processor_row(record: IndelRecord) -> List[str]:
 
     return [
         record.contig,
-        str(record.ref_position + 1),
+        str(record.ref_position),
         record.type.value,
         str(record.length),
         f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
