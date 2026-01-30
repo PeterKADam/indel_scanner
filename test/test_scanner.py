@@ -187,6 +187,92 @@ class TestStrCandidateFilter:
         )
         assert len(results) == 1
 
+
+class TestCallableIndelLogic:
+    def test_callable_deletion_uses_skipped_right_flank(
+        self, mock_scanner_config, read_factory
+    ):
+        mock_scanner_config.min_flank_quality = 93
+        mock_scanner_config.min_homopolymer_len = 3
+        mock_scanner_config.processor_filters = []
+        scanner = ContigScanner(mock_scanner_config)
+        mock_str_classifier = Mock()
+        mock_str_classifier.is_in_str.return_value = False
+
+        read = read_factory(query_sequence="A" * 10)
+        read.query_qualities = [93, 93, 93, 20, 93, 93, 93, 93, 93, 93]
+
+        contig_seq = "ACGT" * 10
+        # length=2 means right flank at read_pos+2 (index 5)
+        assert (
+            scanner._is_callable_for_deletion_length(
+                read,
+                read_pos=3,
+                ref_pos=100,
+                contig_seq=contig_seq,
+                str_classifier=mock_str_classifier,
+                length=2,
+            )
+            is True
+        )
+
+    def test_callable_insertion_uses_skipped_right_flank(
+        self, mock_scanner_config, read_factory
+    ):
+        mock_scanner_config.min_flank_quality = 93
+        mock_scanner_config.min_homopolymer_len = 3
+        mock_scanner_config.processor_filters = []
+        mock_scanner_config.min_base_quality = 20
+        scanner = ContigScanner(mock_scanner_config)
+        mock_str_classifier = Mock()
+        mock_str_classifier.is_in_str.return_value = False
+
+        read = read_factory(query_sequence="A" * 10)
+        read.query_qualities = [93, 93, 93, 93, 93, 93, 93, 93, 93, 93]
+
+        contig_seq = "ACGT" * 10
+        # length=2 means right flank at read_pos+2 (index 5)
+        assert (
+            scanner._is_callable_for_insertion_length(
+                read,
+                read_pos=3,
+                ref_pos=100,
+                contig_seq=contig_seq,
+                str_classifier=mock_str_classifier,
+                length=2,
+            )
+            is True
+        )
+
+    def test_callable_span_str_blocks(
+        self, mock_scanner_config, read_factory
+    ):
+        mock_scanner_config.min_flank_quality = 93
+        mock_scanner_config.min_homopolymer_len = 3
+        mock_scanner_config.processor_filters = []
+        scanner = ContigScanner(mock_scanner_config)
+        mock_str_classifier = Mock()
+        mock_str_classifier.is_in_str.side_effect = (
+            lambda pos: pos == 101
+        )
+
+        read = read_factory(query_sequence="A" * 10)
+        read.query_qualities = [93] * 10
+
+        contig_seq = "ACGT" * 10
+        # span covers ref_pos 100-102, including 101 -> not callable
+        assert (
+            scanner._is_callable_for_deletion_length(
+                read,
+                read_pos=3,
+                ref_pos=100,
+                contig_seq=contig_seq,
+                str_classifier=mock_str_classifier,
+                length=3,
+            )
+            is False
+        )
+
     def test_filters_insertion_with_repeat_units(self, mock_scanner_config, read_factory):
         mock_scanner_config.min_indel_size = 1
         mock_scanner_config.str_candidate_filter = {

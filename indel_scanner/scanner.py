@@ -205,7 +205,9 @@ class ContigScanner:
                             read_pos_tracker + length : read_pos_tracker + length + 5
                         ],
                         read_name=read_name,
-                        in_STR_region=str_classifier.is_in_str(ref_pos_tracker),
+                        in_STR_region=self._span_has_str(
+                            ref_pos_tracker, length, str_classifier
+                        ),
                         in_STR=str_classifier.matches_rptrf_motif_length(
                             ref_pos_tracker, contig_seq, length, indel_content
                         ),
@@ -294,7 +296,9 @@ class ContigScanner:
                             ref_pos_tracker + length : ref_pos_tracker + length + 5
                         ],
                         read_name=read_name,
-                        in_STR_region=str_classifier.is_in_str(ref_pos_tracker),
+                        in_STR_region=self._span_has_str(
+                            ref_pos_tracker, length, str_classifier
+                        ),
                         in_STR=str_classifier.matches_rptrf_motif_length(
                             ref_pos_tracker, contig_seq, length, indel_content
                         ),
@@ -382,6 +386,26 @@ class ContigScanner:
                 return params.get("min_quality", self.config.min_base_quality)
         return self.config.min_base_quality
 
+    def _span_has_str(
+        self, ref_pos: int, length: int, str_classifier: STRClassifier
+    ) -> bool:
+        if length <= 0:
+            return False
+        for offset in range(length):
+            if IndelFilters.check_if_in_str(ref_pos + offset, str_classifier):
+                return True
+        return False
+
+    def _span_has_homopolymer(self, contig_seq: str, ref_pos: int, length: int) -> bool:
+        if length <= 0:
+            return False
+        for offset in range(length):
+            if IndelFilters.check_if_homopolymer_context(
+                contig_seq, ref_pos + offset, self.config.min_homopolymer_len
+            ):
+                return True
+        return False
+
     def _is_callable_for_insertion_length(
         self,
         read: pysam.AlignedSegment,
@@ -396,22 +420,21 @@ class ContigScanner:
         qualities = read.query_qualities
         if qualities is None:
             return False
-        if read_pos <= 0 or read_pos + length >= len(qualities):
+        right_flank_idx = read_pos + length
+        if read_pos <= 0 or right_flank_idx >= len(qualities):
             return False
         if (
             qualities[read_pos - 1] < self.config.min_flank_quality
-            or qualities[read_pos] < self.config.min_flank_quality
+            or qualities[right_flank_idx] < self.config.min_flank_quality
         ):
             return False
         insertion_window = qualities[read_pos : read_pos + length]
         min_quality = self._get_processor_min_quality()
         if insertion_window and min(insertion_window) < min_quality:
             return False
-        if IndelFilters.check_if_in_str(ref_pos, str_classifier):
+        if self._span_has_str(ref_pos, length, str_classifier):
             return False
-        if IndelFilters.check_if_homopolymer_context(
-            contig_seq, ref_pos, self.config.min_homopolymer_len
-        ):
+        if self._span_has_homopolymer(contig_seq, ref_pos, length):
             return False
         return True
 
@@ -429,18 +452,17 @@ class ContigScanner:
         qualities = read.query_qualities
         if qualities is None:
             return False
-        if read_pos <= 0 or read_pos >= len(qualities):
+        right_flank_idx = read_pos + length
+        if read_pos <= 0 or right_flank_idx >= len(qualities):
             return False
         if (
             qualities[read_pos - 1] < self.config.min_flank_quality
-            or qualities[read_pos] < self.config.min_flank_quality
+            or qualities[right_flank_idx] < self.config.min_flank_quality
         ):
             return False
-        if IndelFilters.check_if_in_str(ref_pos, str_classifier):
+        if self._span_has_str(ref_pos, length, str_classifier):
             return False
-        if IndelFilters.check_if_homopolymer_context(
-            contig_seq, ref_pos, self.config.min_homopolymer_len
-        ):
+        if self._span_has_homopolymer(contig_seq, ref_pos, length):
             return False
         return True
 
@@ -463,11 +485,12 @@ class ContigScanner:
         qualities = read.query_qualities
         if qualities is None:
             return False
-        if read_pos <= 0 or read_pos + length >= len(qualities):
+        right_flank_idx = read_pos + length
+        if read_pos <= 0 or right_flank_idx >= len(qualities):
             return False
         if (
             qualities[read_pos - 1] < self.config.min_flank_quality
-            or qualities[read_pos] < self.config.min_flank_quality
+            or qualities[right_flank_idx] < self.config.min_flank_quality
         ):
             return False
         insertion_window = qualities[read_pos : read_pos + length]
@@ -476,9 +499,7 @@ class ContigScanner:
             return False
         if not str_classifier.matches_rptrf_motif(ref_pos, contig_seq):
             return False
-        if IndelFilters.check_if_homopolymer_context(
-            contig_seq, ref_pos, self.config.min_homopolymer_len
-        ):
+        if self._span_has_homopolymer(contig_seq, ref_pos, length):
             return False
         return True
 
@@ -501,18 +522,17 @@ class ContigScanner:
         qualities = read.query_qualities
         if qualities is None:
             return False
-        if read_pos <= 0 or read_pos >= len(qualities):
+        right_flank_idx = read_pos + length
+        if read_pos <= 0 or right_flank_idx >= len(qualities):
             return False
         if (
             qualities[read_pos - 1] < self.config.min_flank_quality
-            or qualities[read_pos] < self.config.min_flank_quality
+            or qualities[right_flank_idx] < self.config.min_flank_quality
         ):
             return False
         if not str_classifier.matches_rptrf_motif(ref_pos, contig_seq):
             return False
-        if IndelFilters.check_if_homopolymer_context(
-            contig_seq, ref_pos, self.config.min_homopolymer_len
-        ):
+        if self._span_has_homopolymer(contig_seq, ref_pos, length):
             return False
         return True
 
