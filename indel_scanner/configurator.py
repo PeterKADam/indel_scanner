@@ -182,7 +182,9 @@ class PipelineConfig:
         self.callable_lengths: list[int] = []
         self.contigs = self._parse_contigs(self.args.contigs, self.scanner.get("contigs"))
         self.test_run: bool = bool(getattr(self.args, "test_run", False))
-        self.test_contigs_count: int = 10
+        self.test_contigs_count: int = int(
+            getattr(self.args, "test_contigs_count", 10)
+        )
 
         self._setup_output()
 
@@ -305,6 +307,12 @@ class Config:
             "--test-run",
             action="store_true",
             help="Run on ~10 contigs around median length for quick testing.",
+        )
+        parser.add_argument(
+            "--test-contigs-count",
+            type=int,
+            default=10,
+            help="Number of contigs to include when --test-run is set.",
         )
         return parser.parse_args()
 
