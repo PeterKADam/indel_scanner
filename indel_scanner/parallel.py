@@ -177,6 +177,7 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         "sampling_bases_total": 0,
         "sampling_passable_by_type": {},
         "sampling_passable_by_motif": {},
+        "tract_counts_by_motif": {},
         "type_counts": {},
     }
     in_memory_records = []
@@ -388,6 +389,10 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                     for k, v in stats.get("sampling_passable_by_motif", {}).items():
                         total_stats["sampling_passable_by_motif"][k] = (
                             total_stats["sampling_passable_by_motif"].get(k, 0) + v
+                        )
+                    for k, v in stats.get("tract_counts_by_motif", {}).items():
+                        total_stats["tract_counts_by_motif"][k] = (
+                            total_stats["tract_counts_by_motif"].get(k, 0) + v
                         )
 
     return scannerconfig.passed_indels_path, total_interrogated_bases, total_stats

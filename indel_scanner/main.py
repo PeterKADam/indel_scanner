@@ -35,15 +35,12 @@ def main():
         else:
             callable_bases_by_type[mutation_type] = 0.0
 
-    for mutation_type, passable_count in stats.get(
-        "sampling_passable_by_motif", {}
-    ).items():
-        if sampling_total > 0:
-            callable_bases_by_type[mutation_type] = (
-                passable_count / sampling_total
-            ) * stats["total_aligned_bases"]
-        else:
-            callable_bases_by_type[mutation_type] = 0.0
+    tract_counts_by_motif = stats.get("tract_counts_by_motif", {})
+    for motif_len, tract_count in tract_counts_by_motif.items():
+        key_ins = f"ins_motif_{motif_len}bp"
+        key_del = f"del_motif_{motif_len}bp"
+        callable_bases_by_type[key_ins] = float(tract_count)
+        callable_bases_by_type[key_del] = float(tract_count)
 
     type_counts = dict(stats["type_counts"])
     type_counts.setdefault(config.snp_label, 0)
@@ -54,6 +51,10 @@ def main():
         "Sampling total=%s; callable_by_type=%s",
         sampling_total,
         callable_bases_by_type,
+    )
+    logger.info(
+        "STR tracts by motif length=%s (RPTRF tract counts)",
+        tract_counts_by_motif,
     )
 
     write_per_type_mutation_report(

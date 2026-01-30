@@ -458,6 +458,7 @@ class ContigScanner:
         sampling_bases_total = 0
         sampling_passable_by_type: dict[str, int] = {}
         sampling_passable_by_motif: dict[str, int] = {}
+        tract_counts_by_motif: dict[int, int] = {}
         callable_lengths = list(getattr(self.config, "callable_lengths", []))
         sampling_contigs = set(getattr(self.config, "sampling_contigs", []))
         sampling_targets = getattr(self.config, "sampling_contig_targets", {})
@@ -468,6 +469,14 @@ class ContigScanner:
         )
         sample_prob = 1.0 if contig_len <= 0 else min(1.0, contig_target / contig_len)
         rng = random.Random(self.config.sampling_random_seed + hash(contig_name) % 1000000)
+
+        regions = str_classifier.iter_regions()
+        region_motif_lens = [r[2] for r in regions]
+        for motif_len in region_motif_lens:
+            if motif_len:
+                tract_counts_by_motif[motif_len] = (
+                    tract_counts_by_motif.get(motif_len, 0) + 1
+                )
 
         for read in samfile.fetch(contig=contig_name):
             if not self._valid_read(read) or read.mapping_quality < self.config.min_map_quality:
@@ -547,6 +556,7 @@ class ContigScanner:
             "sampling_bases_total": sampling_bases_total,
             "sampling_passable_by_type": sampling_passable_by_type,
             "sampling_passable_by_motif": sampling_passable_by_motif,
+            "tract_counts_by_motif": tract_counts_by_motif,
             "sampled_contig": sampling_active,
         }
 
