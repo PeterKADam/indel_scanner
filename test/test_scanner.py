@@ -141,6 +141,7 @@ class TestStrCandidateFilter:
         scanner = ContigScanner(mock_scanner_config)
         mock_str_classifier = Mock()
         mock_str_classifier.is_within_str_window.return_value = True
+        mock_str_classifier.is_str_like.return_value = False
         mock_str_classifier.is_in_str.return_value = False
         mock_str_classifier.matches_rptrf_motif_length.return_value = False
         mock_str_classifier.motif_length_at.return_value = None
@@ -167,7 +168,8 @@ class TestStrCandidateFilter:
         }
         scanner = ContigScanner(mock_scanner_config)
         mock_str_classifier = Mock()
-        mock_str_classifier.is_within_str_window.return_value = True
+        mock_str_classifier.is_within_str_window.return_value = False
+        mock_str_classifier.is_str_like.return_value = False
         mock_str_classifier.is_in_str.return_value = False
         mock_str_classifier.matches_rptrf_motif_length.return_value = False
         mock_str_classifier.motif_length_at.return_value = None
@@ -185,6 +187,37 @@ class TestStrCandidateFilter:
         )
         assert len(results) == 1
 
+    def test_filters_insertion_with_repeat_units(self, mock_scanner_config, read_factory):
+        mock_scanner_config.min_indel_size = 1
+        mock_scanner_config.str_candidate_filter = {
+            "enabled": True,
+            "min_repeat_units": 3,
+            "window_bp": 100,
+            "local_window_bp": 30,
+            "max_motif_len": 6,
+        }
+        scanner = ContigScanner(mock_scanner_config)
+        mock_str_classifier = Mock()
+        mock_str_classifier.is_within_str_window.return_value = False
+        mock_str_classifier.is_str_like.return_value = False
+        mock_str_classifier.is_in_str.return_value = False
+        mock_str_classifier.matches_rptrf_motif_length.return_value = False
+        mock_str_classifier.motif_length_at.return_value = None
+
+        repeat_insert = "TACAA" * 3
+        read = read_factory(
+            reference_start=100,
+            cigartuples=[(0, 10), (1, len(repeat_insert)), (0, 10)],
+            query_sequence="A" * 10 + repeat_insert + "C" * 10,
+        )
+        read.query_qualities = [93] * len(read.query_sequence)
+
+        contig_seq = "ACGT" * 40
+        results = list(
+            scanner._parse_cigar_for_candidates(read, mock_str_classifier, contig_seq)
+        )
+        assert results == []
+
     def test_skips_str_like_deletion_near_rptrf(self, mock_scanner_config, read_factory):
         mock_scanner_config.min_indel_size = 1
         mock_scanner_config.str_candidate_filter = {
@@ -195,6 +228,7 @@ class TestStrCandidateFilter:
         scanner = ContigScanner(mock_scanner_config)
         mock_str_classifier = Mock()
         mock_str_classifier.is_within_str_window.return_value = True
+        mock_str_classifier.is_str_like.return_value = False
         mock_str_classifier.is_in_str.return_value = False
         mock_str_classifier.matches_rptrf_motif_length.return_value = False
         mock_str_classifier.motif_length_at.return_value = None
@@ -224,6 +258,7 @@ class TestStrCandidateFilter:
         scanner = ContigScanner(mock_scanner_config)
         mock_str_classifier = Mock()
         mock_str_classifier.is_within_str_window.return_value = False
+        mock_str_classifier.is_str_like.return_value = False
         mock_str_classifier.is_in_str.return_value = False
         mock_str_classifier.matches_rptrf_motif_length.return_value = False
         mock_str_classifier.motif_length_at.return_value = None
@@ -253,6 +288,7 @@ class TestStrCandidateFilter:
         scanner = ContigScanner(mock_scanner_config)
         mock_str_classifier = Mock()
         mock_str_classifier.is_within_str_window.return_value = True
+        mock_str_classifier.is_str_like.return_value = False
         mock_str_classifier.is_in_str.return_value = False
         mock_str_classifier.matches_rptrf_motif_length.return_value = False
         mock_str_classifier.motif_length_at.return_value = None
@@ -282,6 +318,7 @@ class TestStrCandidateFilter:
         scanner = ContigScanner(mock_scanner_config)
         mock_str_classifier = Mock()
         mock_str_classifier.is_within_str_window.return_value = True
+        mock_str_classifier.is_str_like.return_value = False
         mock_str_classifier.is_in_str.return_value = False
         mock_str_classifier.matches_rptrf_motif_length.return_value = False
         mock_str_classifier.motif_length_at.return_value = None
@@ -302,6 +339,7 @@ class TestStrCandidateFilter:
         mock_scanner_config.str_candidate_filter = {"enabled": False}
         scanner = ContigScanner(mock_scanner_config)
         mock_str_classifier.is_within_str_window.return_value = False
+        mock_str_classifier.is_str_like.return_value = False
         results = list(
             scanner._parse_cigar_for_candidates(read, mock_str_classifier, contig_seq)
         )

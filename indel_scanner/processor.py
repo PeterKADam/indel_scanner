@@ -56,7 +56,7 @@ class Processor:
                     if len(row) < len(TSV_HEADERS.SCANNER.value):
                         continue
                     contig = row[0]
-                    position = int(row[1])
+                    position = int(row[1]) - 1
                     indel_type = row[2]
                     length = int(row[3])
                     sequence_context = row[4]

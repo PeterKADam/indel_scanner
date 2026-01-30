@@ -143,6 +143,13 @@ class ContigScanner:
                     indel_content = seq[read_pos_tracker : read_pos_tracker + length]
                     filter_cfg = getattr(self.config, "str_candidate_filter", {})
                     if filter_cfg.get("enabled", False):
+                        window_bp = int(filter_cfg.get("window_bp", 0))
+                        if window_bp > 0 and str_classifier.is_within_str_window(
+                            ref_pos_tracker, window_bp
+                        ):
+                            continue
+                        if str_classifier.is_str_like(ref_pos_tracker, contig_seq):
+                            continue
                         motif_len = self._repeat_unit_length(
                             indel_content, int(filter_cfg.get("min_repeat_units", 3))
                         )
@@ -151,8 +158,14 @@ class ContigScanner:
                         win_start = max(0, ref_pos_tracker - local_window)
                         win_end = min(len(contig_seq), ref_pos_tracker + local_window)
                         local_seq = contig_seq[win_start:win_end]
+                        has_repeat_in_indel = self._has_repeat_run(
+                            indel_content,
+                            int(filter_cfg.get("min_repeat_units", 3)),
+                            max_motif_len,
+                        )
                         if (
                             motif_len is not None
+                            or has_repeat_in_indel
                             or self._has_repeat_run(
                                 local_seq,
                                 int(filter_cfg.get("min_repeat_units", 3)),
@@ -198,6 +211,13 @@ class ContigScanner:
                     ]
                     filter_cfg = getattr(self.config, "str_candidate_filter", {})
                     if filter_cfg.get("enabled", False):
+                        window_bp = int(filter_cfg.get("window_bp", 0))
+                        if window_bp > 0 and str_classifier.is_within_str_window(
+                            ref_pos_tracker, window_bp
+                        ):
+                            continue
+                        if str_classifier.is_str_like(ref_pos_tracker, contig_seq):
+                            continue
                         motif_len = self._repeat_unit_length(
                             indel_content, int(filter_cfg.get("min_repeat_units", 3))
                         )
@@ -206,8 +226,14 @@ class ContigScanner:
                         win_start = max(0, ref_pos_tracker - local_window)
                         win_end = min(len(contig_seq), ref_pos_tracker + local_window)
                         local_seq = contig_seq[win_start:win_end]
+                        has_repeat_in_indel = self._has_repeat_run(
+                            indel_content,
+                            int(filter_cfg.get("min_repeat_units", 3)),
+                            max_motif_len,
+                        )
                         if (
                             motif_len is not None
+                            or has_repeat_in_indel
                             or self._has_repeat_run(
                                 local_seq,
                                 int(filter_cfg.get("min_repeat_units", 3)),
