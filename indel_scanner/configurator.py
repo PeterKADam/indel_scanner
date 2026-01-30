@@ -74,6 +74,11 @@ DEFAULT_PIPELINE: Dict[str, Any] = {
         "max_window_bp": 80,
         "max_mismatches": 2,
     },
+    "str_candidate_filter": {
+        "enabled": True,
+        "min_repeat_units": 3,
+        "window_bp": 100,
+    },
     "indel_bins": [
         {"label": "indel_1bp", "min": 1, "max": 1},
         {"label": "indel_2_3bp", "min": 2, "max": 3},
@@ -114,6 +119,10 @@ class PipelineConfig:
         self.pipeline["repeat_run"] = {
             **DEFAULT_PIPELINE["repeat_run"],
             **(self.pipeline.get("repeat_run") or {}),
+        }
+        self.pipeline["str_candidate_filter"] = {
+            **DEFAULT_PIPELINE["str_candidate_filter"],
+            **(self.pipeline.get("str_candidate_filter") or {}),
         }
 
         self.num_processes: int = self.scanner["num_processes"]
@@ -158,6 +167,7 @@ class PipelineConfig:
         self.imperfect_str = self.pipeline["imperfect_str"]
         self.low_complexity = self.pipeline["low_complexity"]
         self.repeat_run = self.pipeline["repeat_run"]
+        self.str_candidate_filter = self.pipeline["str_candidate_filter"]
         self.sampling_contig: str = ""
         self.sampling_contigs: list[str] = []
         self.sampling_contig_lengths: dict[str, int] = {}

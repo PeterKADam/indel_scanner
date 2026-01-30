@@ -23,6 +23,25 @@ READ_CONSUMING_OPS = {Cigar.OP_M, Cigar.OP_I, Cigar.OP_S, Cigar.OP_EQ, Cigar.OP_
 
 
 class ContigScanner:
+    @staticmethod
+    def _repeat_unit_length(seq: str, min_units: int) -> Optional[int]:
+        seq = seq.upper()
+        if not seq or "N" in seq:
+            return None
+        seq_len = len(seq)
+        if seq_len < min_units:
+            return None
+        max_motif_len = seq_len // min_units
+        for motif_len in range(1, max_motif_len + 1):
+            if seq_len % motif_len != 0:
+                continue
+            units = seq_len // motif_len
+            if units < min_units:
+                continue
+            motif = seq[:motif_len]
+            if motif * units == seq:
+                return motif_len
+        return None
     def __init__(self, config: PipelineConfig):
         self.config = config
 
@@ -71,6 +90,15 @@ class ContigScanner:
                     indel_quality = list(qualities[read_pos_tracker:insertion_end])
                     suffix_quality = list(qualities[insertion_end:suffix_end])
                     indel_content = seq[read_pos_tracker : read_pos_tracker + length]
+                    filter_cfg = getattr(self.config, "str_candidate_filter", {})
+                    if filter_cfg.get("enabled", False):
+                        motif_len = self._repeat_unit_length(
+                            indel_content, int(filter_cfg.get("min_repeat_units", 3))
+                        )
+                        if motif_len is not None and str_classifier.is_within_str_window(
+                            ref_pos_tracker, int(filter_cfg.get("window_bp", 100))
+                        ):
+                            continue
                     motif_length = str_classifier.motif_length_at(ref_pos_tracker)
                     yield IndelRecord(
                         contig=ref_name,
@@ -107,6 +135,15 @@ class ContigScanner:
                     indel_content = contig_seq[
                         ref_pos_tracker : ref_pos_tracker + length
                     ]
+                    filter_cfg = getattr(self.config, "str_candidate_filter", {})
+                    if filter_cfg.get("enabled", False):
+                        motif_len = self._repeat_unit_length(
+                            indel_content, int(filter_cfg.get("min_repeat_units", 3))
+                        )
+                        if motif_len is not None and str_classifier.is_within_str_window(
+                            ref_pos_tracker, int(filter_cfg.get("window_bp", 100))
+                        ):
+                            continue
                     motif_length = str_classifier.motif_length_at(ref_pos_tracker)
                     yield IndelRecord(
                         contig=ref_name,

@@ -175,6 +175,22 @@ class STRClassifier:
             return position + 1
         return position
 
+    def is_within_str_window(self, position: int, window_bp: int) -> bool:
+        if not self.num_regions:
+            return False
+        idx = bisect.bisect_right(self.starts, position)
+        candidate_indices = []
+        if idx > 0:
+            candidate_indices.append(idx - 1)
+        if idx < self.num_regions:
+            candidate_indices.append(idx)
+        for cand in candidate_indices:
+            start = self.starts[cand]
+            end = self.ends[cand]
+            if start - window_bp <= position <= end + window_bp:
+                return True
+        return False
+
     def matches_rptrf_motif_length(
         self,
         position: int,
