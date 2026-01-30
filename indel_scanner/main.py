@@ -29,7 +29,9 @@ def main():
         stats["passed"],
     )
 
-    callable_bases_by_type = build_callable_bases_by_type(stats, config.snp_label)
+    callable_bases_by_type, str_region_counts_by_type = build_callable_bases_by_type(
+        stats, config.snp_label
+    )
     type_counts = dict(stats["type_counts"])
     type_counts.setdefault(config.snp_label, 0)
 
@@ -46,12 +48,14 @@ def main():
     write_per_type_mutation_report(
         passed_indels_path=passed_indels_path,
         callable_bases_by_type=callable_bases_by_type,
+        str_region_counts_by_type=str_region_counts_by_type,
         output_dir=config.output_path,
         report_filename=config.per_type_report_filename,
         indel_bins=config.indel_bins,
     )
     write_callable_bases_report(
         callable_bases_by_type=callable_bases_by_type,
+        str_region_counts_by_type=str_region_counts_by_type,
         output_dir=config.output_path,
         report_filename=config.callable_bases_filename,
     )

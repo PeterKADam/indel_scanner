@@ -61,7 +61,7 @@ def write_mutation_frequency_report(
 def build_callable_bases_by_type(
     stats: dict,
     snp_label: str,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], dict[str, int]]:
     sampling_total = stats["sampling_bases_total"]
     sampling_totals_by_type = stats.get("sampling_totals_by_type")
     callable_bases_by_type: dict[str, float] = {}
@@ -78,21 +78,23 @@ def build_callable_bases_by_type(
         else:
             callable_bases_by_type[mutation_type] = 0.0
 
+    str_region_counts_by_type: dict[str, int] = {}
     tract_counts_by_motif = stats.get("tract_counts_by_motif", {})
     for motif_len, tract_count in tract_counts_by_motif.items():
         key_ins = f"ins_motif_{motif_len}bp"
         key_del = f"del_motif_{motif_len}bp"
-        callable_bases_by_type[key_ins] = float(tract_count)
-        callable_bases_by_type[key_del] = float(tract_count)
+        str_region_counts_by_type[key_ins] = int(tract_count)
+        str_region_counts_by_type[key_del] = int(tract_count)
 
     if snp_label not in callable_bases_by_type:
         callable_bases_by_type[snp_label] = 0.0
 
-    return callable_bases_by_type
+    return callable_bases_by_type, str_region_counts_by_type
 
 
 def write_callable_bases_report(
     callable_bases_by_type: dict[str, float],
+    str_region_counts_by_type: dict[str, int],
     output_dir: Path,
     report_filename: str,
 ) -> Path:
@@ -100,10 +102,13 @@ def write_callable_bases_report(
     try:
         with open(report_path, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t")
-            writer.writerow(["mutation_type", "callable_bases"])
-            for mutation_type in sorted(callable_bases_by_type):
+            writer.writerow(["mutation_type", "callable_bases", "str_region_count"])
+            all_types = set(callable_bases_by_type) | set(str_region_counts_by_type)
+            for mutation_type in sorted(all_types):
+                callable_bases = callable_bases_by_type.get(mutation_type, 0.0)
+                str_regions = str_region_counts_by_type.get(mutation_type, 0)
                 writer.writerow(
-                    [mutation_type, f"{callable_bases_by_type[mutation_type]:.0f}"]
+                    [mutation_type, f"{callable_bases:.0f}", str_regions]
                 )
         logger.info(f"Callable bases report written to {report_path}")
     except Exception as e:
@@ -113,7 +118,8 @@ def write_callable_bases_report(
 
 def write_per_type_mutation_report(
     passed_indels_path: Path,
-    callable_bases_by_type: dict,
+    callable_bases_by_type: dict[str, float],
+    str_region_counts_by_type: dict[str, int],
     output_dir: Path,
     report_filename: str,
     indel_bins: list[dict],
@@ -137,7 +143,14 @@ def write_per_type_mutation_report(
         with open(report_path, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t")
             writer.writerow(
-                ["mutation_type", "str_class", "count", "callable_bases", "frequency"]
+                [
+                    "mutation_type",
+                    "str_class",
+                    "count",
+                    "callable_bases",
+                    "str_region_count",
+                    "frequency",
+                ]
             )
             if passed_df is None or passed_df.empty:
                 return report_path
@@ -166,23 +179,27 @@ def write_per_type_mutation_report(
                 )
             df["str_class"] = df["str_motif"].map(lambda v: "STR_motif" if v else "non_STR")
 
-            grouped = (
-                df.groupby(["mutation_type", "str_class"])
-                .size()
-                .reset_index(name="count")
-            )
+            grouped = df.groupby(["mutation_type", "str_class"]).size().reset_index()
+            grouped = grouped.rename(columns={0: "count"})
 
             for _, row in grouped.iterrows():
-                mutation_type = row["mutation_type"]
+                mutation_type = str(row["mutation_type"])
                 count = int(row["count"])
+                str_class = str(row["str_class"])
                 callable_bases = callable_bases_by_type.get(mutation_type, 0.0)
-                frequency = count / callable_bases if callable_bases > 0 else 0.0
+                str_region_count = str_region_counts_by_type.get(mutation_type, 0)
+                if str_class == "STR_motif":
+                    denominator = float(str_region_count)
+                else:
+                    denominator = callable_bases
+                frequency = count / denominator if denominator > 0 else 0.0
                 writer.writerow(
                     [
                         mutation_type,
-                        row["str_class"],
+                        str_class,
                         count,
                         f"{callable_bases:.0f}",
+                        str_region_count,
                         f"{frequency:.10e}",
                     ]
                 )
