@@ -1,6 +1,8 @@
 # indel_scanner/scanner.py
 from pathlib import Path
 from typing import Generator, Optional
+from collections import defaultdict
+import random
 import pysam
 import pyfastx
 import time
@@ -281,7 +283,9 @@ class ContigScanner:
         length: int,
     ) -> bool:
         motif_len = str_classifier.motif_length_at(ref_pos)
-        if motif_len is None or motif_len != length:
+        if motif_len is None or motif_len <= 0:
+            return False
+        if length % motif_len != 0:
             return False
         if read_pos is None or ref_pos is None:
             return False
@@ -317,7 +321,9 @@ class ContigScanner:
         length: int,
     ) -> bool:
         motif_len = str_classifier.motif_length_at(ref_pos)
-        if motif_len is None or motif_len != length:
+        if motif_len is None or motif_len <= 0:
+            return False
+        if length % motif_len != 0:
             return False
         if read_pos is None or ref_pos is None:
             return False
@@ -350,15 +356,6 @@ class ContigScanner:
         str_classifier = STRClassifier(self.config, contig_name)
         contig_seq = fasta[contig_name].seq
         interrogated_bases_count = 0
-        total_aligned_bases = 0
-        sampling_bases_total = 0
-        sampling_passable_by_type: dict[str, int] = {}
-        sampling_passable_by_motif: dict[str, int] = {}
-        sampling_active = (
-            self.config.sampling_strategy == "largest_contig"
-            and contig_name == self.config.sampling_contig
-        )
-        sampled_contig = sampling_active
         reads_processed = 0
         candidates: list[IndelRecord] = []
         location_counts = {}
@@ -372,72 +369,11 @@ class ContigScanner:
             for read_pos, ref_pos in read.get_aligned_pairs(matches_only=True):
                 if ref_pos is None or read_pos is None:
                     continue
-                total_aligned_bases += 1
                 is_callable = self._is_callable_at_position(
                     read, read_pos, ref_pos, str_classifier, contig_seq
                 )
                 if is_callable:
                     interrogated_bases_count += 1
-
-                if sampling_active and sampling_bases_total < self.config.sampling_bases:
-                    sampling_bases_total += 1
-                    if is_callable:
-                        sampling_passable_by_type[self.config.snp_label] = (
-                            sampling_passable_by_type.get(self.config.snp_label, 0) + 1
-                        )
-                    for bin_cfg in self.config.indel_bins:
-                        length_for_bin = bin_cfg["max"]
-                        if self._is_callable_for_insertion_length(
-                            read,
-                            read_pos,
-                            ref_pos,
-                            contig_seq,
-                            str_classifier,
-                            length_for_bin,
-                        ):
-                            ins_label = self._bin_label(bin_cfg, INDEL_TYPE.INSERTION)
-                            sampling_passable_by_type[ins_label] = (
-                                sampling_passable_by_type.get(ins_label, 0) + 1
-                            )
-                        if self._is_callable_for_deletion_length(
-                            read,
-                            read_pos,
-                            ref_pos,
-                            contig_seq,
-                            str_classifier,
-                            length_for_bin,
-                        ):
-                            del_label = self._bin_label(bin_cfg, INDEL_TYPE.DELETION)
-                            sampling_passable_by_type[del_label] = (
-                                sampling_passable_by_type.get(del_label, 0) + 1
-                            )
-
-                    motif_len = str_classifier.motif_length_at(ref_pos)
-                    if motif_len:
-                        if self._is_callable_for_insertion_length_str(
-                            read,
-                            read_pos,
-                            ref_pos,
-                            contig_seq,
-                            str_classifier,
-                            motif_len,
-                        ):
-                            key = f"ins_motif_{motif_len}bp"
-                            sampling_passable_by_motif[key] = (
-                                sampling_passable_by_motif.get(key, 0) + 1
-                            )
-                        if self._is_callable_for_deletion_length_str(
-                            read,
-                            read_pos,
-                            ref_pos,
-                            contig_seq,
-                            str_classifier,
-                            motif_len,
-                        ):
-                            key = f"del_motif_{motif_len}bp"
-                            sampling_passable_by_motif[key] = (
-                                sampling_passable_by_motif.get(key, 0) + 1
-                            )
 
                 if is_callable and self._is_snp_candidate(
                     read, read_pos, ref_pos, contig_seq
@@ -453,7 +389,35 @@ class ContigScanner:
                 key = (candidate.ref_position, candidate.type, candidate.length)
                 location_counts[key] = location_counts.get(key, 0) + 1
 
-        filter_context = {"location_map": location_counts, "str_classifier": str_classifier}
+        position_counts: dict[int, int] = defaultdict(int)
+        for candidate in candidates:
+            position_counts[candidate.ref_position] += 1
+
+        target_positions = set()
+        for pos in position_counts.keys():
+            for offset in (-1, 0, 1):
+                target_positions.add(pos + offset)
+
+        coverage_by_pos: dict[int, int] = defaultdict(int)
+        if target_positions:
+            for read in samfile.fetch(contig=contig_name):
+                if (
+                    not self._valid_read(read)
+                    or read.mapping_quality < self.config.min_map_quality
+                ):
+                    continue
+                for read_pos, ref_pos in read.get_aligned_pairs(matches_only=True):
+                    if ref_pos is None or read_pos is None:
+                        continue
+                    if ref_pos in target_positions:
+                        coverage_by_pos[ref_pos] += 1
+
+        filter_context = {
+            "location_map": location_counts,
+            "position_counts": position_counts,
+            "coverage_by_pos": coverage_by_pos,
+            "str_classifier": str_classifier,
+        }
         passed_records: list[IndelRecord] = []
         for candidate in candidates:
             IndelFilters.apply(self.config.processor_filters, candidate, **filter_context)
@@ -477,14 +441,113 @@ class ContigScanner:
             "reads_processed": reads_processed,
             "candidates": len(candidates),
             "passed": len(passed_records),
-            "total_aligned_bases": total_aligned_bases,
-            "sampling_bases_total": sampling_bases_total,
-            "sampling_passable_by_type": sampling_passable_by_type,
-            "sampling_passable_by_motif": sampling_passable_by_motif,
-            "sampled_contig": sampled_contig,
             "type_counts": type_counts,
             "elapsed_s": end_time - start_time,
         }
         return (passed_records if in_memory else None, interrogated_bases_count, stats)
+
+    def scan_contig_callable_only(
+        self,
+        contig_name: str,
+        samfile: pysam.AlignmentFile,
+        fasta: pyfastx.Fasta,
+    ) -> dict:
+        str_classifier = STRClassifier(self.config, contig_name)
+        contig_seq = fasta[contig_name].seq
+        total_aligned_bases = 0
+        sampling_bases_total = 0
+        sampling_passable_by_type: dict[str, int] = {}
+        sampling_passable_by_motif: dict[str, int] = {}
+        callable_lengths = list(getattr(self.config, "callable_lengths", []))
+        sampling_contigs = set(getattr(self.config, "sampling_contigs", []))
+        sampling_targets = getattr(self.config, "sampling_contig_targets", {})
+        contig_target = sampling_targets.get(contig_name, 0)
+        sampling_active = contig_name in sampling_contigs and contig_target > 0
+        contig_len = getattr(self.config, "sampling_contig_lengths", {}).get(
+            contig_name, len(contig_seq)
+        )
+        sample_prob = 1.0 if contig_len <= 0 else min(1.0, contig_target / contig_len)
+        rng = random.Random(self.config.sampling_random_seed + hash(contig_name) % 1000000)
+
+        for read in samfile.fetch(contig=contig_name):
+            if not self._valid_read(read) or read.mapping_quality < self.config.min_map_quality:
+                continue
+            for read_pos, ref_pos in read.get_aligned_pairs(matches_only=True):
+                if ref_pos is None or read_pos is None:
+                    continue
+                total_aligned_bases += 1
+                if not sampling_active or sampling_bases_total >= contig_target:
+                    continue
+                if rng.random() > sample_prob:
+                    continue
+                sampling_bases_total += 1
+                if self._is_callable_at_position(
+                    read, read_pos, ref_pos, str_classifier, contig_seq
+                ):
+                    sampling_passable_by_type[self.config.snp_label] = (
+                        sampling_passable_by_type.get(self.config.snp_label, 0) + 1
+                    )
+                for length_for_indel in callable_lengths:
+                    if self._is_callable_for_insertion_length(
+                        read,
+                        read_pos,
+                        ref_pos,
+                        contig_seq,
+                        str_classifier,
+                        length_for_indel,
+                    ):
+                        ins_label = f"ins_len_{length_for_indel}bp"
+                        sampling_passable_by_type[ins_label] = (
+                            sampling_passable_by_type.get(ins_label, 0) + 1
+                        )
+                    if self._is_callable_for_deletion_length(
+                        read,
+                        read_pos,
+                        ref_pos,
+                        contig_seq,
+                        str_classifier,
+                        length_for_indel,
+                    ):
+                        del_label = f"del_len_{length_for_indel}bp"
+                        sampling_passable_by_type[del_label] = (
+                            sampling_passable_by_type.get(del_label, 0) + 1
+                        )
+                motif_len = str_classifier.motif_length_at(ref_pos)
+                if motif_len:
+                    for length_for_motif in callable_lengths:
+                        if length_for_motif % motif_len != 0:
+                            continue
+                        if self._is_callable_for_insertion_length_str(
+                            read,
+                            read_pos,
+                            ref_pos,
+                            contig_seq,
+                            str_classifier,
+                            length_for_motif,
+                        ):
+                            key = f"ins_motif_{motif_len}bp"
+                            sampling_passable_by_motif[key] = (
+                                sampling_passable_by_motif.get(key, 0) + 1
+                            )
+                        if self._is_callable_for_deletion_length_str(
+                            read,
+                            read_pos,
+                            ref_pos,
+                            contig_seq,
+                            str_classifier,
+                            length_for_motif,
+                        ):
+                            key = f"del_motif_{motif_len}bp"
+                            sampling_passable_by_motif[key] = (
+                                sampling_passable_by_motif.get(key, 0) + 1
+                            )
+
+        return {
+            "total_aligned_bases": total_aligned_bases,
+            "sampling_bases_total": sampling_bases_total,
+            "sampling_passable_by_type": sampling_passable_by_type,
+            "sampling_passable_by_motif": sampling_passable_by_motif,
+            "sampled_contig": sampling_active,
+        }
 
 

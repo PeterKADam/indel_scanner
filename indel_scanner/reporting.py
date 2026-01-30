@@ -77,11 +77,8 @@ def write_per_type_mutation_report(
         except Exception as e:
             logger.error(f"Failed to read {passed_indels_path}: {e}")
 
-    def bin_label(length: int) -> str:
-        for bin_cfg in indel_bins:
-            if bin_cfg["min"] <= length <= bin_cfg["max"]:
-                return bin_cfg["label"]
-        return "indel_gt_10bp"
+    def length_label(length: int) -> str:
+        return f"len_{length}bp"
 
     try:
         with open(report_path, "w", newline="") as f:
@@ -94,7 +91,7 @@ def write_per_type_mutation_report(
 
             df = passed_df.copy()
             df["type_prefix"] = df["type"].map(lambda t: "ins_" if t == "ins" else "del_")
-            df["bin_label"] = df["length"].map(bin_label)
+            df["length_label"] = df["length"].map(length_label)
             if "in_STR_region" in df.columns and "in_STR" in df.columns:
                 df["str_motif"] = df["in_STR_region"] & df["in_STR"]
             else:
@@ -105,7 +102,7 @@ def write_per_type_mutation_report(
                 )
             else:
                 df["motif_length"] = pd.NA
-            df["mutation_type"] = df["type_prefix"] + df["bin_label"]
+            df["mutation_type"] = df["type_prefix"] + df["length_label"]
             motif_mask = df["str_motif"] & df["motif_length"].notna()
             if motif_mask.any():
                 df.loc[motif_mask, "mutation_type"] = (
