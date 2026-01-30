@@ -24,6 +24,26 @@ READ_CONSUMING_OPS = {Cigar.OP_M, Cigar.OP_I, Cigar.OP_S, Cigar.OP_EQ, Cigar.OP_
 
 class ContigScanner:
     @staticmethod
+    def _aligned_blocks(
+        read: pysam.AlignedSegment,
+    ) -> list[tuple[int, int, int]]:
+        if read.cigartuples is None:
+            return []
+        blocks: list[tuple[int, int, int]] = []
+        ref_pos = read.reference_start
+        read_pos = 0
+        for op_int, length in read.cigartuples:
+            op = as_cigar(op_int)
+            if op in (Cigar.OP_M, Cigar.OP_EQ, Cigar.OP_X):
+                blocks.append((read_pos, ref_pos, length))
+                read_pos += length
+                ref_pos += length
+            elif op in (Cigar.OP_I, Cigar.OP_S):
+                read_pos += length
+            elif op in (Cigar.OP_D, Cigar.OP_N):
+                ref_pos += length
+        return blocks
+    @staticmethod
     def _repeat_unit_length(seq: str, min_units: int) -> Optional[int]:
         seq = seq.upper()
         if not seq or "N" in seq:
@@ -547,7 +567,6 @@ class ContigScanner:
         total_aligned_bases = 0
         sampling_bases_total = 0
         sampling_passable_by_type: dict[str, int] = {}
-        sampling_passable_by_motif: dict[str, int] = {}
         tract_counts_by_motif: dict[int, int] = {}
         callable_lengths = list(getattr(self.config, "callable_lengths", []))
         sampling_contigs = set(getattr(self.config, "sampling_contigs", []))
@@ -571,14 +590,35 @@ class ContigScanner:
         for read in samfile.fetch(contig=contig_name):
             if not self._valid_read(read) or read.mapping_quality < self.config.min_map_quality:
                 continue
-            for read_pos, ref_pos in read.get_aligned_pairs(matches_only=True):
-                if ref_pos is None or read_pos is None:
-                    continue
-                total_aligned_bases += 1
-                if not sampling_active or sampling_bases_total >= contig_target:
-                    continue
-                if rng.random() > sample_prob:
-                    continue
+            blocks = self._aligned_blocks(read)
+            aligned_len = sum(block[2] for block in blocks)
+            total_aligned_bases += aligned_len
+            if not sampling_active or sampling_bases_total >= contig_target:
+                continue
+            if aligned_len <= 0:
+                continue
+            expected = aligned_len * sample_prob
+            sample_count = int(expected)
+            if rng.random() < (expected - sample_count):
+                sample_count += 1
+            remaining = contig_target - sampling_bases_total
+            if remaining <= 0:
+                continue
+            sample_count = min(sample_count, remaining, aligned_len)
+            if sample_count <= 0:
+                continue
+            offsets = sorted(rng.sample(range(aligned_len), sample_count))
+            block_idx = 0
+            block_read_start, block_ref_start, block_len = blocks[block_idx]
+            block_end = block_len
+            for offset in offsets:
+                while offset >= block_end and block_idx < len(blocks) - 1:
+                    block_idx += 1
+                    block_read_start, block_ref_start, block_len = blocks[block_idx]
+                    block_end += block_len
+                local_offset = offset - (block_end - block_len)
+                read_pos = block_read_start + local_offset
+                ref_pos = block_ref_start + local_offset
                 sampling_bases_total += 1
                 if self._is_callable_at_position(
                     read, read_pos, ref_pos, str_classifier, contig_seq
@@ -611,41 +651,10 @@ class ContigScanner:
                         sampling_passable_by_type[del_label] = (
                             sampling_passable_by_type.get(del_label, 0) + 1
                         )
-                motif_len = str_classifier.motif_length_at(ref_pos)
-                if motif_len:
-                    for length_for_motif in callable_lengths:
-                        if length_for_motif % motif_len != 0:
-                            continue
-                        if self._is_callable_for_insertion_length_str(
-                            read,
-                            read_pos,
-                            ref_pos,
-                            contig_seq,
-                            str_classifier,
-                            length_for_motif,
-                        ):
-                            key = f"ins_motif_{motif_len}bp"
-                            sampling_passable_by_motif[key] = (
-                                sampling_passable_by_motif.get(key, 0) + 1
-                            )
-                        if self._is_callable_for_deletion_length_str(
-                            read,
-                            read_pos,
-                            ref_pos,
-                            contig_seq,
-                            str_classifier,
-                            length_for_motif,
-                        ):
-                            key = f"del_motif_{motif_len}bp"
-                            sampling_passable_by_motif[key] = (
-                                sampling_passable_by_motif.get(key, 0) + 1
-                            )
-
         return {
             "total_aligned_bases": total_aligned_bases,
             "sampling_bases_total": sampling_bases_total,
             "sampling_passable_by_type": sampling_passable_by_type,
-            "sampling_passable_by_motif": sampling_passable_by_motif,
             "tract_counts_by_motif": tract_counts_by_motif,
             "sampled_contig": sampling_active,
         }

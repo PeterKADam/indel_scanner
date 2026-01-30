@@ -69,10 +69,15 @@ def _process_contig_streaming(contig_name: str):
 def _process_contig_callable(contig_name: str):
     if _WORKER_CONFIG is None or _WORKER_BAM is None or _WORKER_FASTA is None:
         raise RuntimeError("Worker not initialized with BAM/FASTA/config.")
+    if _WORKER_STATUS_QUEUE is not None:
+        _WORKER_STATUS_QUEUE.put(
+            ("start", current_process().name, contig_name))
     scanner = ContigScanner(_WORKER_CONFIG)
     stats = scanner.scan_contig_callable_only(
         contig_name, _WORKER_BAM, _WORKER_FASTA
     )
+    if _WORKER_STATUS_QUEUE is not None:
+        _WORKER_STATUS_QUEUE.put(("done", current_process().name, contig_name))
     return contig_name, stats
 
 
@@ -183,7 +188,6 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         "total_aligned_bases": 0,
         "sampling_bases_total": 0,
         "sampling_passable_by_type": {},
-        "sampling_passable_by_motif": {},
         "tract_counts_by_motif": {},
         "type_counts": {},
     }
@@ -370,36 +374,137 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     observed_lengths = _collect_indel_lengths(scannerconfig.passed_indels_path)
     scannerconfig.callable_lengths = observed_lengths
 
-    callable_workers = min(2, parallel_n)
+    callable_workers = parallel_n
     logger.info("Starting callable-bases pass with %s workers...", callable_workers)
-    with Pool(
-        processes=callable_workers,
-        initializer=_init_worker,
-        initargs=(
-            str(scannerconfig.bamfile),
-            str(scannerconfig.fastafile),
-            scannerconfig,
-            sampling_contig,
-            None,
-        ),
-    ) as pool:
-        for result in pool.imap_unordered(_process_contig_callable, contigs):
-            if result:
-                _, stats = result
-                total_stats["total_aligned_bases"] += stats["total_aligned_bases"]
-                if stats.get("sampled_contig"):
-                    total_stats["sampling_bases_total"] += stats["sampling_bases_total"]
-                    for k, v in stats["sampling_passable_by_type"].items():
-                        total_stats["sampling_passable_by_type"][k] = (
-                            total_stats["sampling_passable_by_type"].get(k, 0) + v
-                        )
-                    for k, v in stats.get("sampling_passable_by_motif", {}).items():
-                        total_stats["sampling_passable_by_motif"][k] = (
-                            total_stats["sampling_passable_by_motif"].get(k, 0) + v
-                        )
-                    for k, v in stats.get("tract_counts_by_motif", {}).items():
-                        total_stats["tract_counts_by_motif"][k] = (
-                            total_stats["tract_counts_by_motif"].get(k, 0) + v
-                        )
+    status_queue = Queue()
+    ui_queue = Queue()
+    active_workers = {}
+    worker_start_times = {}
+    active_lock = Lock()
+
+    def format_callable_worker_table() -> Table:
+        max_workers = 20
+        console_width = Console().size.width
+        min_cell_width = 24
+        columns = max(1, min(4, console_width // (min_cell_width + 3)))
+        display_workers = min(callable_workers, max_workers)
+        cell_width = max(min_cell_width, (console_width // columns) - 3)
+        contig_width = max(8, cell_width - 12)
+        table = Table.grid(padding=(0, 1))
+        for _ in range(columns):
+            table.add_column(no_wrap=True, width=cell_width)
+        with active_lock:
+            entries = []
+            for worker_id in range(1, display_workers + 1):
+                worker_key = str(worker_id)
+                contig = active_workers.get(worker_key, "idle")
+                start_time = worker_start_times.get(worker_key)
+                elapsed = int(time.monotonic() - start_time) if start_time else 0
+                contig_label = contig[:contig_width]
+                entries.append(
+                    f"W{worker_id:<2} {contig_label:<{contig_width}} {elapsed:>5d}s"
+                )
+        for idx in range(0, len(entries), columns):
+            row_cells = [cell.ljust(cell_width) for cell in entries[idx : idx + columns]]
+            while len(row_cells) < columns:
+                row_cells.append("")
+            table.add_row(*row_cells)
+        return table
+
+    def drain_callable_status_queue():
+        while True:
+            try:
+                event, worker_name, contig_name = status_queue.get_nowait()
+            except Empty:
+                break
+            with active_lock:
+                worker_id = worker_name.split("-")[-1]
+                if event == "start":
+                    active_workers[worker_id] = contig_name
+                    worker_start_times[worker_id] = time.monotonic()
+                elif event == "done":
+                    active_workers.pop(worker_id, None)
+                    worker_start_times.pop(worker_id, None)
+
+    callable_progress = Progress(*progress_columns, transient=False, auto_refresh=False)
+    callable_stop_event = Event()
+
+    def callable_status_updater():
+        while not callable_stop_event.is_set():
+            total_advance = 0
+            while True:
+                try:
+                    event, value = ui_queue.get_nowait()
+                except Empty:
+                    break
+                if event == "advance":
+                    total_advance += int(value)
+            drain_callable_status_queue()
+            callable_progress.update(callable_task_id, advance=total_advance)
+            worker_title = f"Workers ({min(callable_workers, 20)}/{callable_workers})"
+            group = Group(
+                Panel(callable_progress, title="Callable progress", padding=(0, 1)),
+                Panel.fit(
+                    format_callable_worker_table(),
+                    title=worker_title,
+                    padding=(0, 1),
+                ),
+            )
+            callable_live.update(group, refresh=True)
+            callable_stop_event.wait(1.0)
+
+    worker_title = f"Workers ({min(callable_workers, 20)}/{callable_workers})"
+    group = Group(
+        Panel(callable_progress, title="Callable progress", padding=(0, 1)),
+        Panel.fit(format_callable_worker_table(), title=worker_title, padding=(0, 1)),
+    )
+    with Live(group, refresh_per_second=1, transient=False) as callable_live:
+        callable_task_id = callable_progress.add_task(
+            "[green]Callable bases...",
+            total=len(contigs),
+        )
+        status_thread = Thread(target=callable_status_updater, daemon=True)
+        status_thread.start()
+        try:
+            with Pool(
+                processes=callable_workers,
+                initializer=_init_worker,
+                initargs=(
+                    str(scannerconfig.bamfile),
+                    str(scannerconfig.fastafile),
+                    scannerconfig,
+                    sampling_contig,
+                    status_queue,
+                ),
+            ) as pool:
+                for result in pool.imap_unordered(_process_contig_callable, contigs):
+                    if result:
+                        _, stats = result
+                        total_stats["total_aligned_bases"] += stats["total_aligned_bases"]
+                        if stats.get("sampled_contig"):
+                            total_stats["sampling_bases_total"] += stats[
+                                "sampling_bases_total"
+                            ]
+                            for k, v in stats["sampling_passable_by_type"].items():
+                                total_stats["sampling_passable_by_type"][k] = (
+                                    total_stats["sampling_passable_by_type"].get(k, 0)
+                                    + v
+                                )
+                            for k, v in stats.get("tract_counts_by_motif", {}).items():
+                                total_stats["tract_counts_by_motif"][k] = (
+                                    total_stats["tract_counts_by_motif"].get(k, 0)
+                                    + v
+                                )
+                        ui_queue.put(("advance", 1))
+        finally:
+            callable_stop_event.set()
+            status_thread.join()
+            drain_callable_status_queue()
+            worker_title = f"Workers ({min(callable_workers, 20)}/{callable_workers})"
+            group = Group(
+                Panel(callable_progress, title="Callable progress", padding=(0, 1)),
+                Panel.fit(format_callable_worker_table(), title=worker_title, padding=(0, 1)),
+            )
+            callable_live.update(group, refresh=True)
 
     return scannerconfig.passed_indels_path, total_interrogated_bases, total_stats

@@ -49,9 +49,12 @@ class TestParallelPipeline:
         mocker.patch('indel_scanner.parallel._collect_indel_lengths', return_value=[1])
         m_logger = mocker.patch('indel_scanner.parallel.logger')
         queue_mock = mocker.patch('indel_scanner.parallel.Queue')
-        queue_instance = MagicMock()
-        queue_instance.get_nowait.side_effect = Empty
-        queue_mock.return_value = queue_instance
+        queue_instances = []
+        for _ in range(4):
+            instance = MagicMock()
+            instance.get_nowait.side_effect = Empty
+            queue_instances.append(instance)
+        queue_mock.side_effect = queue_instances
 
         # Mock external libraries (pysam, multiprocessing, rich)
         m_pysam = mocker.patch('indel_scanner.parallel.pysam.AlignmentFile')
@@ -63,7 +66,7 @@ class TestParallelPipeline:
         event_instance = MagicMock()
         event_instance.is_set.return_value = False
         event_instance.wait.return_value = None
-        event_mock.side_effect = [event_instance, event_instance]
+        event_mock.return_value = event_instance
 
         # --- Configure the behavior of the mocks ---
         # 1. Configure pysam mock to return a fake SAM file with two contigs
@@ -107,7 +110,6 @@ class TestParallelPipeline:
                     "total_aligned_bases": 50,
                     "sampling_bases_total": 5,
                     "sampling_passable_by_type": {"snp": 2, "ins_len_1bp": 1},
-                    "sampling_passable_by_motif": {},
                     "tract_counts_by_motif": {},
                     "sampled_contig": True,
                 },
@@ -138,7 +140,12 @@ class TestParallelPipeline:
         mock_pool_instance.imap_unordered.assert_called_once()
 
         # Verify progress bar was used
-        mock_progress_instance.add_task.assert_called_once_with("[green]Scanning contigs...", total=2)
+        mock_progress_instance.add_task.assert_any_call(
+            "[green]Scanning contigs...", total=2
+        )
+        mock_progress_instance.add_task.assert_any_call(
+            "[green]Callable bases...", total=2
+        )
 
         # Verify final aggregation step
         m_aggregate.assert_called_once_with(
@@ -162,9 +169,12 @@ class TestParallelPipeline:
         mocker.patch('indel_scanner.parallel._collect_indel_lengths', return_value=[1])
         mocker.patch('indel_scanner.parallel.logger')
         queue_mock = mocker.patch('indel_scanner.parallel.Queue')
-        queue_instance = MagicMock()
-        queue_instance.get_nowait.side_effect = Empty
-        queue_mock.return_value = queue_instance
+        queue_instances = []
+        for _ in range(4):
+            instance = MagicMock()
+            instance.get_nowait.side_effect = Empty
+            queue_instances.append(instance)
+        queue_mock.side_effect = queue_instances
         m_pysam = mocker.patch('indel_scanner.parallel.pysam.AlignmentFile')
 
         # --- FIX: Patch 'Pool' where it is looked up, not where it is defined ---
@@ -177,7 +187,7 @@ class TestParallelPipeline:
         event_instance = MagicMock()
         event_instance.is_set.return_value = False
         event_instance.wait.return_value = None
-        event_mock.side_effect = [event_instance, event_instance]
+        event_mock.return_value = event_instance
         m_cpu_count = mocker.patch('indel_scanner.parallel.cpu_count', return_value=8)
 
         # Basic setup for pysam to allow the function to run

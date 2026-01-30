@@ -92,6 +92,16 @@ class TestIndelBinning:
 
 
 class TestRepeatUnitDetection:
+    def test_aligned_blocks_from_cigar(self, mock_scanner_config, read_factory):
+        scanner = ContigScanner(mock_scanner_config)
+        read = read_factory(
+            reference_start=100,
+            cigartuples=[(0, 5), (1, 2), (0, 3), (2, 4), (0, 2)],
+            query_sequence="A" * 12,
+        )
+        blocks = scanner._aligned_blocks(read)
+        assert blocks == [(0, 100, 5), (7, 105, 3), (10, 112, 2)]
+
     def test_repeat_unit_length_detects_exact_repeats(self, mock_scanner_config):
         scanner = ContigScanner(mock_scanner_config)
         assert scanner._repeat_unit_length("ATATAT", 3) == 2
