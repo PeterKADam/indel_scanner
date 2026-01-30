@@ -69,15 +69,19 @@ def _process_contig_streaming(contig_name: str):
 def _process_contig_callable(contig_name: str):
     if _WORKER_CONFIG is None or _WORKER_BAM is None or _WORKER_FASTA is None:
         raise RuntimeError("Worker not initialized with BAM/FASTA/config.")
+    worker_name = current_process().name
     if _WORKER_STATUS_QUEUE is not None:
-        _WORKER_STATUS_QUEUE.put(
-            ("start", current_process().name, contig_name))
+        _WORKER_STATUS_QUEUE.put(("start", worker_name, contig_name))
+    else:
+        logger.info("Callable bases worker %s starting %s", worker_name, contig_name)
     scanner = ContigScanner(_WORKER_CONFIG)
     stats = scanner.scan_contig_callable_only(
         contig_name, _WORKER_BAM, _WORKER_FASTA
     )
     if _WORKER_STATUS_QUEUE is not None:
-        _WORKER_STATUS_QUEUE.put(("done", current_process().name, contig_name))
+        _WORKER_STATUS_QUEUE.put(("done", worker_name, contig_name))
+    else:
+        logger.info("Callable bases worker %s finished %s", worker_name, contig_name)
     return contig_name, stats
 
 
@@ -498,7 +502,9 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                         total_advance += int(value)
                 drain_callable_status_queue()
                 callable_progress.update(callable_task_id, advance=total_advance)
-                worker_title = f"Workers ({min(callable_workers, 20)}/{callable_workers})"
+                worker_title = (
+                    f"Workers ({min(callable_workers, 20)}/{callable_workers}) - idle means waiting or finished"
+                )
                 group = Group(
                     Panel(callable_progress, title="Callable progress", padding=(0, 1)),
                     Panel.fit(
@@ -510,7 +516,9 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                 callable_live.update(group, refresh=True)
                 callable_stop_event.wait(1.0)
 
-        worker_title = f"Workers ({min(callable_workers, 20)}/{callable_workers})"
+        worker_title = (
+            f"Workers ({min(callable_workers, 20)}/{callable_workers}) - idle means waiting or finished"
+        )
         group = Group(
             Panel(callable_progress, title="Callable progress", padding=(0, 1)),
             Panel.fit(format_callable_worker_table(), title=worker_title, padding=(0, 1)),
@@ -551,7 +559,7 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                 status_thread.join()
                 drain_callable_status_queue()
                 worker_title = (
-                    f"Workers ({min(callable_workers, 20)}/{callable_workers})"
+                    f"Workers ({min(callable_workers, 20)}/{callable_workers}) - idle means waiting or finished"
                 )
                 group = Group(
                     Panel(callable_progress, title="Callable progress", padding=(0, 1)),
