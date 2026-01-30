@@ -115,6 +115,13 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         contig_lookup = dict(zip(contigs, contig_lengths))
         contigs = [c for c in contigs if c in contig_filter]
         contig_lengths = [contig_lookup[c] for c in contigs]
+    if contigs:
+        contig_pairs = sorted(
+            zip(contigs, contig_lengths), key=lambda x: x[1], reverse=True
+        )
+        contigs, contig_lengths = zip(*contig_pairs)
+        contigs = list(contigs)
+        contig_lengths = list(contig_lengths)
     logger.info(f"Found {len(contigs)} contigs.")
     if scannerconfig.sampling_strategy == "largest_contig":
         largest_idx = max(range(len(contigs)), key=lambda i: contig_lengths[i])
