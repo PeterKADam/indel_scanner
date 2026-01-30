@@ -61,6 +61,8 @@ pipeline:
     enabled: true           # Drop STR-like indels near RPTRF tracts
     min_repeat_units: 3     # Minimum repeat units to qualify
     window_bp: 100          # Distance from RPTRF tract to filter
+    local_window_bp: 30     # Window around indel to detect repeat runs
+    max_motif_len: 6        # Max motif length to consider for repeat runs
   snp_label: snp            # Label used for SNP counts in reports
   indel_bins:
     - label: indel_1bp

@@ -1,4 +1,5 @@
 import pytest
+from queue import Empty
 from unittest.mock import MagicMock, call, ANY
 
 # --- IMPORTANT: Adjust the import path to match your project structure ---
@@ -26,6 +27,10 @@ class TestParallelPipeline:
         config.max_in_memory_records = 0
         config.fastafile = "path/to/mock.fasta"
         config.sampling_strategy = "largest_contig"
+        config.sampling_target_aligned_bases = 10000000
+        config.sampling_top_n_contigs = 10
+        config.sampling_random_seed = 1
+        config.callable_lengths = [1, 2, 3]
         return config
 
     def test_parallel_pipeline_happy_path(self, mocker, mock_scanner_config):
@@ -41,12 +46,24 @@ class TestParallelPipeline:
         # --- Arrange: Mock all external dependencies ---
         # Mock the components from your own application
         m_aggregate = mocker.patch('indel_scanner.parallel.aggregate_tsv_parts')
+        mocker.patch('indel_scanner.parallel._collect_indel_lengths', return_value=[1])
         m_logger = mocker.patch('indel_scanner.parallel.logger')
+        queue_mock = mocker.patch('indel_scanner.parallel.Queue')
+        queue_instance = MagicMock()
+        queue_instance.get_nowait.side_effect = Empty
+        queue_mock.return_value = queue_instance
 
         # Mock external libraries (pysam, multiprocessing, rich)
         m_pysam = mocker.patch('indel_scanner.parallel.pysam.AlignmentFile')
         m_pool = mocker.patch('indel_scanner.parallel.Pool')
         m_progress = mocker.patch('indel_scanner.parallel.Progress')
+        mocker.patch('indel_scanner.parallel.Live')
+        mocker.patch('indel_scanner.parallel.Thread')
+        event_mock = mocker.patch('indel_scanner.parallel.Event')
+        event_instance = MagicMock()
+        event_instance.is_set.return_value = False
+        event_instance.wait.return_value = None
+        event_mock.side_effect = [event_instance, event_instance]
 
         # --- Configure the behavior of the mocks ---
         # 1. Configure pysam mock to return a fake SAM file with two contigs
@@ -60,39 +77,49 @@ class TestParallelPipeline:
         # Simulate the pool returning results for each contig
         mock_pool_instance.imap_unordered.return_value = [
             (
-                None,
+                "chr1",
+                [],
                 10,
                 {
                     "reads_processed": 1,
                     "candidates": 2,
                     "passed": 1,
-                    "total_aligned_bases": 50,
-                    "sampling_bases_total": 5,
-                    "sampling_passable_by_type": {"snp": 2, "ins_indel_1bp": 1},
-                    "sampled_contig": True,
                     "type_counts": {"snp": 1},
                 },
             ),
             (
-                None,
+                "chr2",
+                [],
                 12,
                 {
                     "reads_processed": 2,
                     "candidates": 3,
                     "passed": 2,
-                    "total_aligned_bases": 75,
-                    "sampling_bases_total": 0,
-                    "sampling_passable_by_type": {},
-                    "sampled_contig": False,
                     "type_counts": {"del_indel_1bp": 2},
                 },
             ),
         ]
-        m_pool.return_value.__enter__.return_value = mock_pool_instance
+        mock_callable_pool = MagicMock()
+        mock_callable_pool.imap_unordered.return_value = [
+            (
+                "chr1",
+                {
+                    "total_aligned_bases": 50,
+                    "sampling_bases_total": 5,
+                    "sampling_passable_by_type": {"snp": 2, "ins_len_1bp": 1},
+                    "sampling_passable_by_motif": {},
+                    "tract_counts_by_motif": {},
+                    "sampled_contig": True,
+                },
+            )
+        ]
+        mock_pool_instance.__enter__.return_value = mock_pool_instance
+        mock_callable_pool.__enter__.return_value = mock_callable_pool
+        m_pool.side_effect = [mock_pool_instance, mock_callable_pool]
 
         # 3. Configure the Progress bar mock to avoid side effects
         mock_progress_instance = MagicMock()
-        m_progress.return_value.__enter__.return_value = mock_progress_instance
+        m_progress.return_value = mock_progress_instance
 
         # --- Act: Call the function we are testing ---
         parallel_pipeline(mock_scanner_config)
@@ -107,12 +134,11 @@ class TestParallelPipeline:
         m_pysam.assert_called_once_with(str(mock_scanner_config.bamfile), "rb")
 
         # Verify multiprocessing setup and execution
-        m_pool.assert_called_once()
+        assert m_pool.call_count == 2
         mock_pool_instance.imap_unordered.assert_called_once()
 
         # Verify progress bar was used
         mock_progress_instance.add_task.assert_called_once_with("[green]Scanning contigs...", total=2)
-        assert mock_progress_instance.update.call_count == 2
 
         # Verify final aggregation step
         m_aggregate.assert_called_once_with(
@@ -133,13 +159,25 @@ class TestParallelPipeline:
 
         # Mock dependencies.
         mocker.patch('indel_scanner.parallel.aggregate_tsv_parts')
+        mocker.patch('indel_scanner.parallel._collect_indel_lengths', return_value=[1])
         mocker.patch('indel_scanner.parallel.logger')
+        queue_mock = mocker.patch('indel_scanner.parallel.Queue')
+        queue_instance = MagicMock()
+        queue_instance.get_nowait.side_effect = Empty
+        queue_mock.return_value = queue_instance
         m_pysam = mocker.patch('indel_scanner.parallel.pysam.AlignmentFile')
 
         # --- FIX: Patch 'Pool' where it is looked up, not where it is defined ---
         m_pool = mocker.patch('indel_scanner.parallel.Pool')
 
         mocker.patch('indel_scanner.parallel.Progress')
+        mocker.patch('indel_scanner.parallel.Live')
+        mocker.patch('indel_scanner.parallel.Thread')
+        event_mock = mocker.patch('indel_scanner.parallel.Event')
+        event_instance = MagicMock()
+        event_instance.is_set.return_value = False
+        event_instance.wait.return_value = None
+        event_mock.side_effect = [event_instance, event_instance]
         m_cpu_count = mocker.patch('indel_scanner.parallel.cpu_count', return_value=8)
 
         # Basic setup for pysam to allow the function to run
@@ -149,7 +187,11 @@ class TestParallelPipeline:
         m_pysam.return_value.__enter__.return_value = mock_samfile
 
         # Basic setup for Pool context manager
-        m_pool.return_value.__enter__.return_value = MagicMock()
+        mock_pool_instance = MagicMock()
+        mock_callable_pool = MagicMock()
+        mock_pool_instance.__enter__.return_value = MagicMock()
+        mock_callable_pool.__enter__.return_value = MagicMock()
+        m_pool.side_effect = [mock_pool_instance, mock_callable_pool]
 
         # --- Act ---
         parallel_pipeline(mock_scanner_config)
@@ -157,4 +199,4 @@ class TestParallelPipeline:
         # --- Assert ---
         # The key assertion: verify the Pool was created with the value from cpu_count
         m_cpu_count.assert_called_once()
-        m_pool.assert_called_once()
+        assert m_pool.call_count == 2

@@ -138,6 +138,7 @@ def test_to_scanner_tsv_row(insertion_instance, deletion_instance):
         "read_1",
         "False",
         "False",
+        "NA",
         "",
     ]
     assert ins_row == expected_ins
@@ -153,6 +154,7 @@ def test_to_scanner_tsv_row(insertion_instance, deletion_instance):
         "read_2",
         "True",
         "True",
+        "NA",
         "",
     ]
     assert del_row == expected_del
@@ -170,6 +172,7 @@ def test_insertion_to_processor_tsv_row(insertion_instance):
         "read_1",
         "False",
         "False",
+        "NA",
         "",  # Scanner part
         "25,26,27,28",
         "30,31,32",
@@ -191,6 +194,7 @@ def test_deletion_to_processor_tsv_row(deletion_instance):
         "read_2",
         "True",
         "True",
+        "NA",
         "",  # Scanner part
         "20,21,22",
         "NA",

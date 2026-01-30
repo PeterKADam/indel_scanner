@@ -42,6 +42,29 @@ class ContigScanner:
             if motif * units == seq:
                 return motif_len
         return None
+
+    @staticmethod
+    def _has_repeat_run(seq: str, min_units: int, max_motif_len: int) -> bool:
+        seq = seq.upper()
+        if not seq or "N" in seq:
+            return False
+        seq_len = len(seq)
+        for motif_len in range(1, max_motif_len + 1):
+            min_run_len = motif_len * min_units
+            if seq_len < min_run_len:
+                continue
+            for start in range(0, seq_len - min_run_len + 1):
+                motif = seq[start : start + motif_len]
+                if "N" in motif:
+                    continue
+                run_len = 0
+                idx = start
+                while idx + motif_len <= seq_len and seq[idx : idx + motif_len] == motif:
+                    run_len += motif_len
+                    if run_len >= min_run_len:
+                        return True
+                    idx += motif_len
+        return False
     def __init__(self, config: PipelineConfig):
         self.config = config
 
@@ -95,8 +118,23 @@ class ContigScanner:
                         motif_len = self._repeat_unit_length(
                             indel_content, int(filter_cfg.get("min_repeat_units", 3))
                         )
-                        if motif_len is not None and str_classifier.is_within_str_window(
-                            ref_pos_tracker, int(filter_cfg.get("window_bp", 100))
+                        local_window = int(filter_cfg.get("local_window_bp", 30))
+                        max_motif_len = int(filter_cfg.get("max_motif_len", 6))
+                        win_start = max(0, ref_pos_tracker - local_window)
+                        win_end = min(len(contig_seq), ref_pos_tracker + local_window)
+                        local_seq = contig_seq[win_start:win_end]
+                        if (
+                            str_classifier.is_within_str_window(
+                                ref_pos_tracker, int(filter_cfg.get("window_bp", 100))
+                            )
+                            and (
+                                motif_len is not None
+                                or self._has_repeat_run(
+                                    local_seq,
+                                    int(filter_cfg.get("min_repeat_units", 3)),
+                                    max_motif_len,
+                                )
+                            )
                         ):
                             continue
                     motif_length = str_classifier.motif_length_at(ref_pos_tracker)
@@ -140,8 +178,23 @@ class ContigScanner:
                         motif_len = self._repeat_unit_length(
                             indel_content, int(filter_cfg.get("min_repeat_units", 3))
                         )
-                        if motif_len is not None and str_classifier.is_within_str_window(
-                            ref_pos_tracker, int(filter_cfg.get("window_bp", 100))
+                        local_window = int(filter_cfg.get("local_window_bp", 30))
+                        max_motif_len = int(filter_cfg.get("max_motif_len", 6))
+                        win_start = max(0, ref_pos_tracker - local_window)
+                        win_end = min(len(contig_seq), ref_pos_tracker + local_window)
+                        local_seq = contig_seq[win_start:win_end]
+                        if (
+                            str_classifier.is_within_str_window(
+                                ref_pos_tracker, int(filter_cfg.get("window_bp", 100))
+                            )
+                            and (
+                                motif_len is not None
+                                or self._has_repeat_run(
+                                    local_seq,
+                                    int(filter_cfg.get("min_repeat_units", 3)),
+                                    max_motif_len,
+                                )
+                            )
                         ):
                             continue
                     motif_length = str_classifier.motif_length_at(ref_pos_tracker)

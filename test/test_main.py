@@ -33,6 +33,7 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
     mock_config.output_path = Path("out")
     mock_config.per_type_report_filename = "per_type.tsv"
     mock_config.snp_label = "snp"
+    mock_config.log_dir = Path("out/logs")
     mock_config.indel_bins = [
         {"label": "indel_1bp", "min": 1, "max": 1},
         {"label": "indel_2_3bp", "min": 2, "max": 3},
@@ -49,8 +50,9 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
             "passed": 1,
             "total_aligned_bases": 100,
             "sampling_bases_total": 10,
-            "sampling_passable_by_type": {"snp": 2, "ins_indel_1bp": 1},
+            "sampling_passable_by_type": {"snp": 2, "ins_len_1bp": 1},
             "type_counts": {"snp": 1},
+            "tract_counts_by_motif": {},
         },
     )
 
@@ -61,12 +63,7 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
         passed_indels_path=Path("out/processed/final_passed_indels.tsv"),
         callable_bases_by_type={
             "snp": 20.0,
-            "ins_indel_1bp": 10.0,
-            "del_indel_1bp": 0.0,
-            "ins_indel_2_3bp": 0.0,
-            "del_indel_2_3bp": 0.0,
-            "ins_indel_4_10bp": 0.0,
-            "del_indel_4_10bp": 0.0,
+            "ins_len_1bp": 10.0,
         },
         output_dir=mock_config.output_path,
         report_filename=mock_config.per_type_report_filename,

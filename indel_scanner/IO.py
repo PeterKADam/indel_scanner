@@ -179,7 +179,7 @@ def aggregate_tsv_parts(
     with open(final_output_path, "w", newline="") as f_out:
         writer = csv.writer(f_out, delimiter="\t")
         writer.writerow(header)
-        temp_dir_list = list(parts_dir.iterdir())
+        temp_dir_list = sorted(parts_dir.iterdir())
         logger.debug(
             f"Writing ({len(temp_dir_list)}) partial results to final output file..."
         )

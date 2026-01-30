@@ -93,7 +93,7 @@ class TestPipelineConfig:
         output_dir = tmp_path / "scanner_output"
         mock_datetime = mocker.patch("indel_scanner.configurator.datetime")
         mock_datetime.now.return_value = datetime(2026, 1, 20, 0, 0, 0)
-        run_dir = output_dir / "2026-01-20_000000_in"
+        run_dir = output_dir / "in" / "2026-01-20_000000"
         temp_dir = run_dir / "temp_indel_parts"
         temp_dir.mkdir(parents=True, exist_ok=True)
         dummy_file = temp_dir / "stale_data.txt"

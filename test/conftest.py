@@ -16,11 +16,19 @@ def mock_scanner_config():
     config.write_buffer_size = 1000
     config.min_flank_quality = 93
     config.min_base_quality = 20
+    config.min_map_quality = 0
     config.indel_bins = [
         {"label": "indel_1bp", "min": 1, "max": 1},
         {"label": "indel_2_3bp", "min": 2, "max": 3},
         {"label": "indel_4_10bp", "min": 4, "max": 10},
     ]
+    config.str_candidate_filter = {
+        "enabled": False,
+        "min_repeat_units": 3,
+        "window_bp": 100,
+        "local_window_bp": 30,
+        "max_motif_len": 6,
+    }
     config.sampling_strategy = "largest_contig"
     config.sampling_bases = 1000000
     config.snp_label = "snp"
