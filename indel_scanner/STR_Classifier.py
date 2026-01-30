@@ -97,6 +97,15 @@ class STRClassifier:
 
         return repeat_regions
 
+    def iter_regions(self) -> List[Tuple[int, int, int]]:
+        if not self.num_regions:
+            return []
+        regions: List[Tuple[int, int, int]] = []
+        for start, end, motif in zip(self.starts, self.ends, self.motifs):
+            motif_len = len(motif) if motif else 0
+            regions.append((start, end, motif_len))
+        return regions
+
     def is_in_str(self, position: int) -> bool:
         """
         Checks if a given genomic position falls within any STR region.
