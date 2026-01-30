@@ -125,18 +125,18 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         contigs = [c for c in contigs if c in contig_filter]
         contig_lengths = [contig_lookup[c] for c in contigs]
     if getattr(scannerconfig, "test_run", False) and contigs:
-        contig_pairs = sorted(zip(contigs, contig_lengths), key=lambda x: x[1])
+        contig_pairs = list(zip(contigs, contig_lengths))
         target_count = min(
             len(contig_pairs), int(getattr(scannerconfig, "test_contigs_count", 10))
         )
-        midpoint = len(contig_pairs) // 2
-        start = max(0, midpoint - target_count // 2)
-        end = start + target_count
-        contig_pairs = contig_pairs[start:end]
+        mean_length = sum(contig_lengths) / len(contig_lengths)
+        contig_pairs = sorted(
+            contig_pairs, key=lambda pair: abs(pair[1] - mean_length)
+        )[:target_count]
         contigs = [c for c, _ in contig_pairs]
         contig_lengths = [l for _, l in contig_pairs]
         logger.info(
-            "Test run enabled: selected %s contigs around median length.",
+            "Test run enabled: selected %s contigs closest to mean length.",
             len(contigs),
         )
     if contigs:
