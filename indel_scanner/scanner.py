@@ -166,6 +166,23 @@ class ContigScanner:
                         win_start = max(0, ref_pos_tracker - local_window)
                         win_end = min(len(contig_seq), ref_pos_tracker + local_window)
                         local_seq = contig_seq[win_start:win_end]
+                        if filter_cfg.get("micro_repeat_enabled", False):
+                            micro_window = int(
+                                filter_cfg.get("micro_repeat_window_bp", local_window)
+                            )
+                            micro_min_units = int(
+                                filter_cfg.get("micro_repeat_min_units", 2)
+                            )
+                            micro_max_motif_len = int(
+                                filter_cfg.get("micro_repeat_max_motif_len", max_motif_len)
+                            )
+                            micro_start = max(0, ref_pos_tracker - micro_window)
+                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                            micro_seq = contig_seq[micro_start:micro_end]
+                            if self._has_repeat_run(
+                                micro_seq, micro_min_units, micro_max_motif_len
+                            ):
+                                continue
                         has_repeat_in_indel = self._has_repeat_run(
                             indel_content,
                             int(filter_cfg.get("min_repeat_units", 3)),
@@ -257,6 +274,23 @@ class ContigScanner:
                         win_start = max(0, ref_pos_tracker - local_window)
                         win_end = min(len(contig_seq), ref_pos_tracker + local_window)
                         local_seq = contig_seq[win_start:win_end]
+                        if filter_cfg.get("micro_repeat_enabled", False):
+                            micro_window = int(
+                                filter_cfg.get("micro_repeat_window_bp", local_window)
+                            )
+                            micro_min_units = int(
+                                filter_cfg.get("micro_repeat_min_units", 2)
+                            )
+                            micro_max_motif_len = int(
+                                filter_cfg.get("micro_repeat_max_motif_len", max_motif_len)
+                            )
+                            micro_start = max(0, ref_pos_tracker - micro_window)
+                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                            micro_seq = contig_seq[micro_start:micro_end]
+                            if self._has_repeat_run(
+                                micro_seq, micro_min_units, micro_max_motif_len
+                            ):
+                                continue
                         has_repeat_in_indel = self._has_repeat_run(
                             indel_content,
                             int(filter_cfg.get("min_repeat_units", 3)),

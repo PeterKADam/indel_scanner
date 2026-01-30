@@ -84,6 +84,10 @@ DEFAULT_PIPELINE: Dict[str, Any] = {
         "aggressive": False,
         "aggressive_min_repeat_units": 2,
         "aggressive_max_motif_len": 12,
+        "micro_repeat_enabled": False,
+        "micro_repeat_min_units": 2,
+        "micro_repeat_max_motif_len": 6,
+        "micro_repeat_window_bp": 12,
     },
     "indel_bins": [
         {"label": "indel_1bp", "min": 1, "max": 1},
