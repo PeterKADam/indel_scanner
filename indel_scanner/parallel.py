@@ -216,7 +216,20 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
             None,
         ),
     )
-    callable_async = callable_pool.map_async(_process_contig_callable, contigs)
+    pre_results = []
+    pre_done = 0
+    pre_total = len(contigs)
+    for result in callable_pool.imap_unordered(_process_contig_callable, contigs):
+        pre_results.append(result)
+        pre_done += 1
+        if pre_total:
+            progress_pct = (pre_done / pre_total) * 100.0
+            logger.info(
+                "Callable bases 1-10bp pre-pass progress: %s/%s (%.1f%%)",
+                pre_done,
+                pre_total,
+                progress_pct,
+            )
 
     status_queue = Queue()
     ui_queue = Queue()
@@ -396,7 +409,6 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         )
         cleanup_temp_dir(scannerconfig.passed_parts_dir)
 
-    pre_results = callable_async.get()
     callable_pool.close()
     callable_pool.join()
     pre_sampling_total = 0

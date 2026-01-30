@@ -39,6 +39,7 @@ DEFAULT_PROCESSOR: Dict[str, Any] = {
 
 DEFAULT_REPORTING: Dict[str, Any] = {
     "per_type_frequency_filename": "per_type_mutation_frequency.tsv",
+    "callable_bases_filename": "callable_bases.tsv",
 }
 
 DEFAULT_IO: Dict[str, Any] = {
@@ -154,6 +155,7 @@ class PipelineConfig:
         self.processor_filters = self.processor["filters"]
 
         self.per_type_report_filename = self.reporting["per_type_frequency_filename"]
+        self.callable_bases_filename = self.reporting["callable_bases_filename"]
         self.in_memory: bool = self.pipeline["in_memory"]
         self.max_in_memory_records: int = self.pipeline["max_in_memory_records"]
         self.passed_parts_dir = self.output_path / self.pipeline["passed_parts_dir_name"]

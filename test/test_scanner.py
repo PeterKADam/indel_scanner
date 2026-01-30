@@ -92,6 +92,16 @@ class TestIndelBinning:
 
 
 class TestRepeatUnitDetection:
+    def test_valid_read_rejects_soft_clips(self, mock_scanner_config, read_factory):
+        scanner = ContigScanner(mock_scanner_config)
+        read = read_factory(
+            reference_start=100,
+            cigartuples=[(4, 5), (0, 10)],  # 5S, 10M
+            query_sequence="A" * 15,
+        )
+        read.query_qualities = [93] * len(read.query_sequence)
+        assert not scanner._valid_read(read)
+
     def test_aligned_blocks_from_cigar(self, mock_scanner_config, read_factory):
         scanner = ContigScanner(mock_scanner_config)
         read = read_factory(
@@ -225,7 +235,7 @@ class TestStrCandidateFilter:
         )
         read.query_qualities = [93] * len(read.query_sequence)
 
-        contig_seq = "A" * 50 + "ATATCATATATATCATATATATC" + "A" * 50
+        contig_seq = "ACGTTGCAAGCTTGACCGTACGATCGATGCACTG"
         results = list(
             scanner._parse_cigar_for_candidates(read, mock_str_classifier, contig_seq)
         )

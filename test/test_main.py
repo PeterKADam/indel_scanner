@@ -17,6 +17,7 @@ def mock_main_dependencies(mocker):
         "Config_load": mocker.patch("indel_scanner.main.Config.load"),
         "parallel_pipeline": mocker.patch("indel_scanner.main.parallel_pipeline"),
         "per_type_report": mocker.patch("indel_scanner.main.write_per_type_mutation_report"),
+        "callable_report": mocker.patch("indel_scanner.main.write_callable_bases_report"),
         "logger": mocker.patch("indel_scanner.main.logger"),
     }
     return mocks
@@ -33,6 +34,7 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
     mock_config.passed_indels_path = Path("out/processed/final_passed_indels.tsv")
     mock_config.output_path = Path("out")
     mock_config.per_type_report_filename = "per_type.tsv"
+    mock_config.callable_bases_filename = "callable_bases.tsv"
     mock_config.snp_label = "snp"
     mock_config.log_dir = Path("out/logs")
     mock_config.indel_bins = [
@@ -69,5 +71,13 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
         output_dir=mock_config.output_path,
         report_filename=mock_config.per_type_report_filename,
         indel_bins=mock_config.indel_bins,
+    )
+    mock_main_dependencies["callable_report"].assert_called_once_with(
+        callable_bases_by_type=build_callable_bases_by_type(
+            mock_main_dependencies["parallel_pipeline"].return_value[2],
+            mock_config.snp_label,
+        ),
+        output_dir=mock_config.output_path,
+        report_filename=mock_config.callable_bases_filename,
     )
 

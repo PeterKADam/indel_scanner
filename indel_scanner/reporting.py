@@ -91,6 +91,26 @@ def build_callable_bases_by_type(
     return callable_bases_by_type
 
 
+def write_callable_bases_report(
+    callable_bases_by_type: dict[str, float],
+    output_dir: Path,
+    report_filename: str,
+) -> Path:
+    report_path = output_dir / report_filename
+    try:
+        with open(report_path, "w", newline="") as f:
+            writer = csv.writer(f, delimiter="\t")
+            writer.writerow(["mutation_type", "callable_bases"])
+            for mutation_type in sorted(callable_bases_by_type):
+                writer.writerow(
+                    [mutation_type, f"{callable_bases_by_type[mutation_type]:.0f}"]
+                )
+        logger.info(f"Callable bases report written to {report_path}")
+    except Exception as e:
+        logger.error(f"Failed to write callable bases report: {e}")
+    return report_path
+
+
 def write_per_type_mutation_report(
     passed_indels_path: Path,
     callable_bases_by_type: dict,

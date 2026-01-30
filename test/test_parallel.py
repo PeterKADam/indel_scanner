@@ -103,8 +103,7 @@ class TestParallelPipeline:
             ),
         ]
         pre_callable_pool = MagicMock()
-        pre_async = MagicMock()
-        pre_async.get.return_value = [
+        pre_callable_pool.imap_unordered.return_value = [
             (
                 "chr1",
                 {
@@ -116,7 +115,6 @@ class TestParallelPipeline:
                 },
             )
         ]
-        pre_callable_pool.map_async.return_value = pre_async
         mock_pool_instance.__enter__.return_value = mock_pool_instance
         m_pool.side_effect = [pre_callable_pool, mock_pool_instance]
 
@@ -197,9 +195,7 @@ class TestParallelPipeline:
         # Basic setup for Pool context manager
         mock_pool_instance = MagicMock()
         pre_callable_pool = MagicMock()
-        pre_async = MagicMock()
-        pre_async.get.return_value = []
-        pre_callable_pool.map_async.return_value = pre_async
+        pre_callable_pool.imap_unordered.return_value = []
         mock_pool_instance.__enter__.return_value = MagicMock()
         m_pool.side_effect = [pre_callable_pool, mock_pool_instance]
 

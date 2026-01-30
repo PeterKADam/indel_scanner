@@ -29,15 +29,6 @@ def setup_logging(log_dir: Path | None = None, enable_console: bool = True) -> N
         info_log.setLevel(logging.INFO)
         info_log.setFormatter(formatter)
 
-        debug_log = logging.FileHandler(
-            log_dir / "indel_scanner.log",
-            mode="w",
-            encoding="utf-8",
-        )
-        debug_log.setLevel(logging.DEBUG)
-        debug_log.setFormatter(formatter)
-
         root_logger.addHandler(info_log)
-        root_logger.addHandler(debug_log)
 
     logger.setLevel(logging.DEBUG)

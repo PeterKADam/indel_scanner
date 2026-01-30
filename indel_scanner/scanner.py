@@ -90,15 +90,23 @@ class ContigScanner:
 
     @staticmethod
     def _valid_read(read: pysam.AlignedSegment) -> bool:
-        return (
-            not read.is_unmapped
-            and not read.is_secondary
-            and not read.is_supplementary
-            and read.reference_name is not None
-            and read.query_name is not None
-            and read.query_sequence is not None
-            and read.query_qualities is not None
-        )
+        if (
+            read.is_unmapped
+            or read.is_secondary
+            or read.is_supplementary
+            or read.reference_name is None
+            or read.query_name is None
+            or read.query_sequence is None
+            or read.query_qualities is None
+        ):
+            return False
+        if read.cigartuples is None:
+            return False
+        for op_int, _ in read.cigartuples:
+            op = as_cigar(op_int)
+            if op is None or op in (Cigar.OP_S, Cigar.OP_N):
+                return False
+        return True
 
     def _parse_cigar_for_candidates(
         self,
@@ -144,16 +152,11 @@ class ContigScanner:
                         win_end = min(len(contig_seq), ref_pos_tracker + local_window)
                         local_seq = contig_seq[win_start:win_end]
                         if (
-                            str_classifier.is_within_str_window(
-                                ref_pos_tracker, int(filter_cfg.get("window_bp", 100))
-                            )
-                            and (
-                                motif_len is not None
-                                or self._has_repeat_run(
-                                    local_seq,
-                                    int(filter_cfg.get("min_repeat_units", 3)),
-                                    max_motif_len,
-                                )
+                            motif_len is not None
+                            or self._has_repeat_run(
+                                local_seq,
+                                int(filter_cfg.get("min_repeat_units", 3)),
+                                max_motif_len,
                             )
                         ):
                             continue
@@ -204,16 +207,11 @@ class ContigScanner:
                         win_end = min(len(contig_seq), ref_pos_tracker + local_window)
                         local_seq = contig_seq[win_start:win_end]
                         if (
-                            str_classifier.is_within_str_window(
-                                ref_pos_tracker, int(filter_cfg.get("window_bp", 100))
-                            )
-                            and (
-                                motif_len is not None
-                                or self._has_repeat_run(
-                                    local_seq,
-                                    int(filter_cfg.get("min_repeat_units", 3)),
-                                    max_motif_len,
-                                )
+                            motif_len is not None
+                            or self._has_repeat_run(
+                                local_seq,
+                                int(filter_cfg.get("min_repeat_units", 3)),
+                                max_motif_len,
                             )
                         ):
                             continue

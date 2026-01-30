@@ -3,6 +3,7 @@ from indel_scanner.configurator import Config
 from indel_scanner.parallel import parallel_pipeline
 from indel_scanner.reporting import (
     build_callable_bases_by_type,
+    write_callable_bases_report,
     write_per_type_mutation_report,
 )
 from indel_scanner.log import setup_logging
@@ -48,6 +49,11 @@ def main():
         output_dir=config.output_path,
         report_filename=config.per_type_report_filename,
         indel_bins=config.indel_bins,
+    )
+    write_callable_bases_report(
+        callable_bases_by_type=callable_bases_by_type,
+        output_dir=config.output_path,
+        report_filename=config.callable_bases_filename,
     )
 
 
