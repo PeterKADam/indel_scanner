@@ -49,13 +49,6 @@ def main():
     type_counts.setdefault(config.snp_label, 0)
     if config.snp_label not in callable_bases_by_type:
         callable_bases_by_type[config.snp_label] = 0.0
-    for bin_cfg in config.indel_bins:
-        ins_label = f"ins_{bin_cfg['label']}"
-        del_label = f"del_{bin_cfg['label']}"
-        type_counts.setdefault(ins_label, 0)
-        type_counts.setdefault(del_label, 0)
-        callable_bases_by_type.setdefault(ins_label, 0.0)
-        callable_bases_by_type.setdefault(del_label, 0.0)
 
     logger.info(
         "Sampling total=%s; callable_by_type=%s",

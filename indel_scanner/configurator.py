@@ -51,7 +51,10 @@ DEFAULT_PIPELINE: Dict[str, Any] = {
     "max_in_memory_records": 500000,
     "passed_parts_dir_name": "temp_passed_indel_parts",
     "sampling_bases": 1000000,
-    "sampling_strategy": "largest_contig",
+    "sampling_strategy": "top_contigs_random",
+    "sampling_top_n_contigs": 10,
+    "sampling_target_aligned_bases": 10000000,
+    "sampling_random_seed": 1,
     "imperfect_str": {
         "enabled": False,
         "expand_bp": 0,
@@ -145,12 +148,21 @@ class PipelineConfig:
         self.passed_parts_dir = self.output_path / self.pipeline["passed_parts_dir_name"]
         self.sampling_bases: int = self.pipeline["sampling_bases"]
         self.sampling_strategy: str = self.pipeline["sampling_strategy"]
+        self.sampling_top_n_contigs: int = self.pipeline["sampling_top_n_contigs"]
+        self.sampling_target_aligned_bases: int = self.pipeline[
+            "sampling_target_aligned_bases"
+        ]
+        self.sampling_random_seed: int = self.pipeline["sampling_random_seed"]
         self.indel_bins = self.pipeline["indel_bins"]
         self.snp_label: str = self.pipeline["snp_label"]
         self.imperfect_str = self.pipeline["imperfect_str"]
         self.low_complexity = self.pipeline["low_complexity"]
         self.repeat_run = self.pipeline["repeat_run"]
         self.sampling_contig: str = ""
+        self.sampling_contigs: list[str] = []
+        self.sampling_contig_lengths: dict[str, int] = {}
+        self.sampling_contig_targets: dict[str, int] = {}
+        self.callable_lengths: list[int] = []
         self.contigs = self._parse_contigs(self.args.contigs, self.scanner.get("contigs"))
 
         self._setup_output()

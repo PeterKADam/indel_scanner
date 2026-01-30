@@ -99,39 +99,22 @@ class STRClassifier:
 
     def is_in_str(self, position: int) -> bool:
         """
-        Checks if a given genomic position falls within any STR region using binary search.
-
-        Args:
-            position: The genomic position to check.
-
-        Returns:
-            True if the position is within an STR, False otherwise.
+        Checks if a given genomic position falls within any STR region.
+        Treats a position immediately before a repeat start (start-1) as inside.
         """
-        if not self.num_regions:
-            return False
-
-        idx = bisect.bisect_right(self.starts, position)
-
-        if idx == 0:
-            # The position is before the start of all known regions.
-            return False
-
-        candidate_index = idx - 1
-
-        candidate_start = self.starts[candidate_index]
-        candidate_end = self.ends[candidate_index]
-
-        return candidate_start <= position <= candidate_end
+        return self._find_region_index(position) is not None
 
     def _find_region_index(self, position: int) -> int | None:
         if not self.num_regions:
             return None
-        idx = bisect.bisect_right(self.starts, position)
-        if idx == 0:
-            return None
-        candidate_index = idx - 1
-        if self.starts[candidate_index] <= position <= self.ends[candidate_index]:
-            return candidate_index
+
+        for check_pos in (position, position + 1):
+            idx = bisect.bisect_right(self.starts, check_pos)
+            if idx == 0:
+                continue
+            candidate_index = idx - 1
+            if self.starts[candidate_index] <= check_pos <= self.ends[candidate_index]:
+                return candidate_index
         return None
 
     def motif_length_at(self, position: int) -> int | None:
@@ -156,8 +139,9 @@ class STRClassifier:
 
         region_start = self.starts[region_index]
         region_end = self.ends[region_index] + 1
-        start = max(region_start, position - motif_len)
-        end = min(region_end, position + motif_len)
+        effective_pos = self._effective_position(position, region_index)
+        start = max(region_start, effective_pos - motif_len)
+        end = min(region_end, effective_pos + motif_len)
         if end - start < motif_len:
             return False
         window = contig_seq[start:end]
@@ -174,6 +158,13 @@ class STRClassifier:
             if matched:
                 return True
         return False
+
+    def _effective_position(self, position: int, region_index: int) -> int:
+        if self.starts[region_index] <= position <= self.ends[region_index]:
+            return position
+        if self.starts[region_index] <= position + 1 <= self.ends[region_index]:
+            return position + 1
+        return position
 
     def matches_rptrf_motif_length(
         self,

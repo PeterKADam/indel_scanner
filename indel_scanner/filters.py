@@ -60,10 +60,38 @@ class IndelFilters:
 
     @staticmethod
     def _similar_indels_in_other_reads(
-        indel: FilterableIndel, location_map: DefaultDict, **kwargs
+        indel: FilterableIndel,
+        location_map: DefaultDict,
+        position_counts: Optional[Dict[int, int]] = None,
+        coverage_by_pos: Optional[Dict[int, int]] = None,
+        pos_window: int = 1,
+        max_support_ratio: float = 0.3,
+        **kwargs,
     ) -> None:
+        window_count = 0
+        if position_counts:
+            for offset in range(-pos_window, pos_window + 1):
+                window_count += position_counts.get(indel.ref_position + offset, 0)
+        else:
+            for (pos, _, _), count in location_map.items():
+                if abs(pos - indel.ref_position) <= pos_window:
+                    window_count += count
+
+        if not indel.in_STR_region:
+            # Outside STRs: any other indel at same/near position rejects.
+            if window_count > 1:
+                indel.filter_mask |= FilterFlag.SIMILAR_IN_OTHER_READS
+            return
+
+        # Inside STRs: reject if indel support exceeds ratio threshold.
+        if coverage_by_pos:
+            coverage = coverage_by_pos.get(indel.ref_position, 0)
+            if coverage > 0 and (window_count / coverage) > max_support_ratio:
+                indel.filter_mask |= FilterFlag.SIMILAR_IN_OTHER_READS
+                return
+
+        # Fallback: use exact match if coverage unavailable.
         key = (indel.ref_position, indel.type, indel.length)
-        # We check for > 1 because the current indel is already in the map
         if location_map.get(key, 0) > 1:
             indel.filter_mask |= FilterFlag.SIMILAR_IN_OTHER_READS
 

@@ -36,8 +36,11 @@ pipeline:
   in_memory: false          # Write per-contig parts (false) or keep in memory (true)
   max_in_memory_records: 500000  # Safety cap when in_memory=true
   passed_parts_dir_name: temp_passed_indel_parts  # Temp dir for per-contig TSVs
-  sampling_bases: 1000000   # Bases sampled for callable-bases estimation
-  sampling_strategy: largest_contig  # Which contig to sample ("largest_contig" or first)
+  sampling_bases: 1000000   # Deprecated, kept for backwards compatibility
+  sampling_strategy: top_contigs_random  # Callable sampling strategy
+  sampling_top_n_contigs: 10            # Sample top N contigs by length
+  sampling_target_aligned_bases: 10000000  # Target aligned bases for sampling
+  sampling_random_seed: 1               # Seed for random sampling
   imperfect_str:
     enabled: true           # Enable imperfect repeat detection
     expand_bp: 0            # Expand STR intervals by this many bp

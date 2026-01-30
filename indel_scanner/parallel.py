@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import csv
 import pysam
 import pyfastx
 from rich.progress import (
@@ -65,6 +66,42 @@ def _process_contig_streaming(contig_name: str):
     return (contig_name, *result)
 
 
+def _process_contig_callable(contig_name: str):
+    if _WORKER_CONFIG is None or _WORKER_BAM is None or _WORKER_FASTA is None:
+        raise RuntimeError("Worker not initialized with BAM/FASTA/config.")
+    scanner = ContigScanner(_WORKER_CONFIG)
+    stats = scanner.scan_contig_callable_only(
+        contig_name, _WORKER_BAM, _WORKER_FASTA
+    )
+    return contig_name, stats
+
+
+def _collect_indel_lengths(passed_indels_path: Path) -> list[int]:
+    if not passed_indels_path.exists():
+        return []
+    lengths = set()
+    try:
+        with open(passed_indels_path, "r") as handle:
+            reader = csv.reader(handle, delimiter="\t")
+            header = next(reader, None)
+            if not header:
+                return []
+            try:
+                length_idx = header.index("length")
+            except ValueError:
+                return []
+            for row in reader:
+                if len(row) <= length_idx:
+                    continue
+                try:
+                    lengths.add(int(row[length_idx]))
+                except ValueError:
+                    continue
+    except Exception:
+        return []
+    return sorted(lengths)
+
+
 def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     parallel_n = scannerconfig.num_processes or cpu_count()
     logger.info(f"Using {parallel_n} parallel processes.")
@@ -82,8 +119,46 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     if scannerconfig.sampling_strategy == "largest_contig":
         largest_idx = max(range(len(contigs)), key=lambda i: contig_lengths[i])
         sampling_contig = contigs[largest_idx]
+        scannerconfig.sampling_contigs = [sampling_contig]
+        scannerconfig.sampling_contig_lengths = {
+            sampling_contig: contig_lengths[largest_idx]
+        }
+        scannerconfig.sampling_contig_targets = {
+            sampling_contig: scannerconfig.sampling_target_aligned_bases
+        }
     else:
         sampling_contig = contigs[0]
+        if scannerconfig.sampling_strategy == "top_contigs_random":
+            contig_pairs = sorted(
+                zip(contigs, contig_lengths), key=lambda x: x[1], reverse=True
+            )
+            top_n = max(1, min(scannerconfig.sampling_top_n_contigs, len(contig_pairs)))
+            sampling_contigs = [c for c, _ in contig_pairs[:top_n]]
+            sampling_lengths = {c: l for c, l in contig_pairs[:top_n]}
+            total_len = sum(sampling_lengths.values()) or 1
+            targets = {}
+            remaining = scannerconfig.sampling_target_aligned_bases
+            for idx, contig in enumerate(sampling_contigs):
+                if idx == len(sampling_contigs) - 1:
+                    target = remaining
+                else:
+                    target = int(
+                        round(
+                            scannerconfig.sampling_target_aligned_bases
+                            * (sampling_lengths[contig] / total_len)
+                        )
+                    )
+                    remaining -= target
+                targets[contig] = max(0, target)
+            scannerconfig.sampling_contigs = sampling_contigs
+            scannerconfig.sampling_contig_lengths = sampling_lengths
+            scannerconfig.sampling_contig_targets = targets
+        else:
+            scannerconfig.sampling_contigs = [sampling_contig]
+            scannerconfig.sampling_contig_lengths = {sampling_contig: contig_lengths[0]}
+            scannerconfig.sampling_contig_targets = {
+                sampling_contig: scannerconfig.sampling_target_aligned_bases
+            }
 
     progress_columns = [
         TextColumn("[progress.description]{task.description}"),
@@ -238,23 +313,6 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                             total_stats["reads"] += stats["reads_processed"]
                             total_stats["candidates"] += stats["candidates"]
                             total_stats["passed"] += stats["passed"]
-                            total_stats["total_aligned_bases"] += stats["total_aligned_bases"]
-                            if stats.get("sampled_contig"):
-                                total_stats["sampling_bases_total"] += stats["sampling_bases_total"]
-                                for k, v in stats["sampling_passable_by_type"].items():
-                                    total_stats["sampling_passable_by_type"][k] = (
-                                        total_stats["sampling_passable_by_type"].get(
-                                            k, 0
-                                        )
-                                        + v
-                                    )
-                                for k, v in stats.get("sampling_passable_by_motif", {}).items():
-                                    total_stats["sampling_passable_by_motif"][k] = (
-                                        total_stats["sampling_passable_by_motif"].get(
-                                            k, 0
-                                        )
-                                        + v
-                                    )
                             for k, v in stats["type_counts"].items():
                                 total_stats["type_counts"][k] = (
                                     total_stats["type_counts"].get(
@@ -300,5 +358,36 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
             TSV_HEADERS.PROCESSOR.value,
         )
         cleanup_temp_dir(scannerconfig.passed_parts_dir)
+
+    observed_lengths = _collect_indel_lengths(scannerconfig.passed_indels_path)
+    scannerconfig.callable_lengths = observed_lengths
+
+    callable_workers = min(2, parallel_n)
+    logger.info("Starting callable-bases pass with %s workers...", callable_workers)
+    with Pool(
+        processes=callable_workers,
+        initializer=_init_worker,
+        initargs=(
+            str(scannerconfig.bamfile),
+            str(scannerconfig.fastafile),
+            scannerconfig,
+            sampling_contig,
+            None,
+        ),
+    ) as pool:
+        for result in pool.imap_unordered(_process_contig_callable, contigs):
+            if result:
+                _, stats = result
+                total_stats["total_aligned_bases"] += stats["total_aligned_bases"]
+                if stats.get("sampled_contig"):
+                    total_stats["sampling_bases_total"] += stats["sampling_bases_total"]
+                    for k, v in stats["sampling_passable_by_type"].items():
+                        total_stats["sampling_passable_by_type"][k] = (
+                            total_stats["sampling_passable_by_type"].get(k, 0) + v
+                        )
+                    for k, v in stats.get("sampling_passable_by_motif", {}).items():
+                        total_stats["sampling_passable_by_motif"][k] = (
+                            total_stats["sampling_passable_by_motif"].get(k, 0) + v
+                        )
 
     return scannerconfig.passed_indels_path, total_interrogated_bases, total_stats
