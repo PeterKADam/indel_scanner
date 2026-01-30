@@ -12,6 +12,7 @@ from .IO import write_passed_indels
 from .indel import IndelRecord
 from .STR_Classifier import STRClassifier
 from .filters import IndelFilters
+from .homopolymer_classifier import HomopolymerClassifier
 from .indel import INDEL_TYPE
 from .utils import Cigar, as_cigar
 from .configurator import PipelineConfig
@@ -399,14 +400,17 @@ class ContigScanner:
         return False
 
     def _span_has_homopolymer(self, contig_seq: str, ref_pos: int, length: int) -> bool:
-        if length <= 0:
+        if length <= 0 or not contig_seq:
             return False
-        for offset in range(length):
-            if IndelFilters.check_if_homopolymer_context(
-                contig_seq, ref_pos + offset, self.config.min_homopolymer_len
-            ):
-                return True
-        return False
+        min_len = self.config.min_homopolymer_len
+        window_start = max(0, ref_pos - min_len)
+        window_end = min(len(contig_seq), ref_pos + length + min_len)
+        context_slice = contig_seq[window_start:window_end]
+        interval_start = max(0, ref_pos - 1 - window_start)
+        interval_end = min(len(context_slice) - 1, ref_pos + length - window_start)
+        return HomopolymerClassifier.run_overlaps_interval(
+            context_slice, (interval_start, interval_end), min_len=min_len
+        )
 
     def _is_callable_for_insertion_length(
         self,
@@ -650,6 +654,7 @@ class ContigScanner:
         total_aligned_bases = 0
         sampling_bases_total = 0
         sampling_passable_by_type: dict[str, int] = {}
+        sampling_totals_by_type: dict[str, int] = {}
         tract_counts_by_motif: dict[int, int] = {}
         callable_lengths = list(getattr(self.config, "callable_lengths", []))
         sampling_contigs = set(getattr(self.config, "sampling_contigs", []))
@@ -703,6 +708,30 @@ class ContigScanner:
                 read_pos = block_read_start + local_offset
                 ref_pos = block_ref_start + local_offset
                 sampling_bases_total += 1
+                filter_cfg = getattr(self.config, "str_candidate_filter", {})
+                non_str_repeat_block = False
+                if filter_cfg.get("enabled", False):
+                    local_window = int(filter_cfg.get("local_window_bp", 30))
+                    max_motif_len = int(filter_cfg.get("max_motif_len", 6))
+                    min_units = int(filter_cfg.get("min_repeat_units", 3))
+                    win_start = max(0, ref_pos - local_window)
+                    win_end = min(len(contig_seq), ref_pos + local_window)
+                    local_seq = contig_seq[win_start:win_end]
+                    non_str_repeat_block = self._has_repeat_run(
+                        local_seq, min_units, max_motif_len
+                    )
+                    if filter_cfg.get("aggressive", False):
+                        aggressive_min_units = int(
+                            filter_cfg.get("aggressive_min_repeat_units", min_units)
+                        )
+                        aggressive_max_motif_len = int(
+                            filter_cfg.get("aggressive_max_motif_len", max_motif_len)
+                        )
+                        non_str_repeat_block = non_str_repeat_block or self._has_repeat_run(
+                            local_seq,
+                            aggressive_min_units,
+                            aggressive_max_motif_len,
+                        )
                 if self._is_callable_at_position(
                     read, read_pos, ref_pos, str_classifier, contig_seq
                 ):
@@ -710,6 +739,56 @@ class ContigScanner:
                         sampling_passable_by_type.get(self.config.snp_label, 0) + 1
                     )
                 for length_for_indel in callable_lengths:
+                    span_in_str = self._span_has_str(
+                        ref_pos, length_for_indel, str_classifier
+                    )
+                    if not span_in_str and non_str_repeat_block:
+                        continue
+                    motif_len = (
+                        str_classifier.motif_length_at(ref_pos) if span_in_str else None
+                    )
+                    if span_in_str and motif_len and length_for_indel % motif_len == 0:
+                        ins_label = f"ins_motif_{motif_len}bp"
+                        del_label = f"del_motif_{motif_len}bp"
+                        sampling_totals_by_type[ins_label] = (
+                            sampling_totals_by_type.get(ins_label, 0) + 1
+                        )
+                        sampling_totals_by_type[del_label] = (
+                            sampling_totals_by_type.get(del_label, 0) + 1
+                        )
+                        if self._is_callable_for_insertion_length_str(
+                            read,
+                            read_pos,
+                            ref_pos,
+                            contig_seq,
+                            str_classifier,
+                            length_for_indel,
+                        ):
+                            sampling_passable_by_type[ins_label] = (
+                                sampling_passable_by_type.get(ins_label, 0) + 1
+                            )
+                        if self._is_callable_for_deletion_length_str(
+                            read,
+                            read_pos,
+                            ref_pos,
+                            contig_seq,
+                            str_classifier,
+                            length_for_indel,
+                        ):
+                            sampling_passable_by_type[del_label] = (
+                                sampling_passable_by_type.get(del_label, 0) + 1
+                            )
+                        continue
+                    if span_in_str:
+                        continue
+                    ins_label = f"ins_len_{length_for_indel}bp"
+                    del_label = f"del_len_{length_for_indel}bp"
+                    sampling_totals_by_type[ins_label] = (
+                        sampling_totals_by_type.get(ins_label, 0) + 1
+                    )
+                    sampling_totals_by_type[del_label] = (
+                        sampling_totals_by_type.get(del_label, 0) + 1
+                    )
                     if self._is_callable_for_insertion_length(
                         read,
                         read_pos,
@@ -718,7 +797,6 @@ class ContigScanner:
                         str_classifier,
                         length_for_indel,
                     ):
-                        ins_label = f"ins_len_{length_for_indel}bp"
                         sampling_passable_by_type[ins_label] = (
                             sampling_passable_by_type.get(ins_label, 0) + 1
                         )
@@ -730,7 +808,6 @@ class ContigScanner:
                         str_classifier,
                         length_for_indel,
                     ):
-                        del_label = f"del_len_{length_for_indel}bp"
                         sampling_passable_by_type[del_label] = (
                             sampling_passable_by_type.get(del_label, 0) + 1
                         )
@@ -738,6 +815,7 @@ class ContigScanner:
             "total_aligned_bases": total_aligned_bases,
             "sampling_bases_total": sampling_bases_total,
             "sampling_passable_by_type": sampling_passable_by_type,
+            "sampling_totals_by_type": sampling_totals_by_type,
             "tract_counts_by_motif": tract_counts_by_motif,
             "sampled_contig": sampling_active,
         }

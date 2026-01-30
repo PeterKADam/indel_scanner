@@ -147,9 +147,11 @@ def write_per_type_mutation_report(
                     "mutation_type",
                     "str_class",
                     "count",
+                    "unique_sites",
                     "callable_bases",
                     "str_region_count",
                     "frequency",
+                    "unique_rate",
                 ]
             )
             if passed_df is None or passed_df.empty:
@@ -181,6 +183,14 @@ def write_per_type_mutation_report(
 
             grouped = df.groupby(["mutation_type", "str_class"]).size().reset_index()
             grouped = grouped.rename(columns={0: "count"})
+            unique_df = df.drop_duplicates(
+                subset=["contig", "ref_position", "type", "length", "str_class", "mutation_type"]
+            )
+            unique_counts = (
+                unique_df.groupby(["mutation_type", "str_class"])
+                .size()
+                .to_dict()
+            )
 
             for _, row in grouped.iterrows():
                 mutation_type = str(row["mutation_type"])
@@ -188,19 +198,20 @@ def write_per_type_mutation_report(
                 str_class = str(row["str_class"])
                 callable_bases = callable_bases_by_type.get(mutation_type, 0.0)
                 str_region_count = str_region_counts_by_type.get(mutation_type, 0)
-                if str_class == "STR_motif":
-                    denominator = float(str_region_count)
-                else:
-                    denominator = callable_bases
+                denominator = callable_bases
                 frequency = count / denominator if denominator > 0 else 0.0
+                unique_sites = int(unique_counts.get((mutation_type, str_class), 0))
+                unique_rate = unique_sites / denominator if denominator > 0 else 0.0
                 writer.writerow(
                     [
                         mutation_type,
                         str_class,
                         count,
+                        unique_sites,
                         f"{callable_bases:.0f}",
                         str_region_count,
                         f"{frequency:.10e}",
+                        f"{unique_rate:.10e}",
                     ]
                 )
         logger.info(f"Per-type mutation report written to {report_path}")

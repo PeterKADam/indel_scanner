@@ -62,21 +62,21 @@ def test_main_runs_full_pipeline(mock_main_dependencies):
     main.main()
 
     mock_main_dependencies["parallel_pipeline"].assert_called_once_with(mock_config)
+    callable_bases_by_type, str_region_counts_by_type = build_callable_bases_by_type(
+        mock_main_dependencies["parallel_pipeline"].return_value[2],
+        mock_config.snp_label,
+    )
     mock_main_dependencies["per_type_report"].assert_called_once_with(
         passed_indels_path=Path("out/processed/final_passed_indels.tsv"),
-        callable_bases_by_type=build_callable_bases_by_type(
-            mock_main_dependencies["parallel_pipeline"].return_value[2],
-            mock_config.snp_label,
-        ),
+        callable_bases_by_type=callable_bases_by_type,
+        str_region_counts_by_type=str_region_counts_by_type,
         output_dir=mock_config.output_path,
         report_filename=mock_config.per_type_report_filename,
         indel_bins=mock_config.indel_bins,
     )
     mock_main_dependencies["callable_report"].assert_called_once_with(
-        callable_bases_by_type=build_callable_bases_by_type(
-            mock_main_dependencies["parallel_pipeline"].return_value[2],
-            mock_config.snp_label,
-        ),
+        callable_bases_by_type=callable_bases_by_type,
+        str_region_counts_by_type=str_region_counts_by_type,
         output_dir=mock_config.output_path,
         report_filename=mock_config.callable_bases_filename,
     )

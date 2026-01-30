@@ -428,6 +428,7 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
     callable_pool.join()
     pre_sampling_total = 0
     pre_passable_by_type: dict[str, int] = {}
+    pre_totals_by_type: dict[str, int] = {}
     pre_total_aligned = 0
     pre_tract_counts: dict[int, int] = {}
     for result in pre_results:
@@ -438,6 +439,8 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                 pre_sampling_total += stats["sampling_bases_total"]
                 for k, v in stats["sampling_passable_by_type"].items():
                     pre_passable_by_type[k] = pre_passable_by_type.get(k, 0) + v
+                for k, v in stats.get("sampling_totals_by_type", {}).items():
+                    pre_totals_by_type[k] = pre_totals_by_type.get(k, 0) + v
             for k, v in stats.get("tract_counts_by_motif", {}).items():
                 pre_tract_counts[k] = pre_tract_counts.get(k, 0) + v
 
@@ -447,7 +450,10 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         total_stats["sampling_passable_by_type"][k] = (
             total_stats["sampling_passable_by_type"].get(k, 0) + v
         )
-        total_stats["sampling_totals_by_type"][k] = pre_sampling_total
+    for k, v in pre_totals_by_type.items():
+        total_stats["sampling_totals_by_type"][k] = (
+            total_stats["sampling_totals_by_type"].get(k, 0) + v
+        )
     for k, v in pre_tract_counts.items():
         total_stats["tract_counts_by_motif"][k] = (
             total_stats["tract_counts_by_motif"].get(k, 0) + v
@@ -516,6 +522,7 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
         callable_stop_event = Event()
         post_sampling_total = 0
         post_passable_by_type: dict[str, int] = {}
+        post_totals_by_type: dict[str, int] = {}
 
         def callable_status_updater():
             while not callable_stop_event.is_set():
@@ -580,6 +587,12 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
                                     post_passable_by_type[k] = (
                                         post_passable_by_type.get(k, 0) + v
                                     )
+                                for k, v in stats.get("sampling_totals_by_type", {}).items():
+                                    if k == scannerconfig.snp_label:
+                                        continue
+                                    post_totals_by_type[k] = (
+                                        post_totals_by_type.get(k, 0) + v
+                                    )
                             ui_queue.put(("advance", 1))
             finally:
                 callable_stop_event.set()
@@ -603,6 +616,9 @@ def parallel_pipeline(scannerconfig: PipelineConfig) -> tuple[Path, int, dict]:
             total_stats["sampling_passable_by_type"][k] = (
                 total_stats["sampling_passable_by_type"].get(k, 0) + v
             )
-            total_stats["sampling_totals_by_type"][k] = post_sampling_total
+        for k, v in post_totals_by_type.items():
+            total_stats["sampling_totals_by_type"][k] = (
+                total_stats["sampling_totals_by_type"].get(k, 0) + v
+            )
 
     return scannerconfig.passed_indels_path, total_interrogated_bases, total_stats

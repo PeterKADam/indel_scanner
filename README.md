@@ -53,6 +53,23 @@ Key files:
 - `per_type_mutation_frequency.tsv`
 - `logs/`
 
+## Mutation rate assumptions (sperm long reads)
+
+This pipeline reports a per-base per-gamete rate by default. Each read is treated as
+one gamete sample, so the mutation rate is:
+
+- numerator: total passed indels across reads
+- denominator: total callable bases across reads
+
+Callable bases are estimated via sampling and aligned with candidate filtering rules:
+
+- STR motif events use motif-specific callable labels (for example, `ins_motif_4bp`)
+- Non-STR events use length-based callable labels (for example, `del_len_2bp`)
+- STR-like repeat runs excluded by the candidate filter are excluded from the callable denominator
+
+The per-type report includes `unique_sites` and `unique_rate` as QC cross-checks. These are not
+the primary metric; they help detect inflated read-level counts by collapsing to unique loci.
+
 ## Configuration
 
 Configuration is read from `config.yaml` and merged with CLI args. Sections:
