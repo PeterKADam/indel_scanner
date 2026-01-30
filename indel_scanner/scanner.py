@@ -142,7 +142,10 @@ class ContigScanner:
                     suffix_quality = list(qualities[insertion_end:suffix_end])
                     indel_content = seq[read_pos_tracker : read_pos_tracker + length]
                     filter_cfg = getattr(self.config, "str_candidate_filter", {})
-                    if filter_cfg.get("enabled", False):
+                    str_motif_match = str_classifier.matches_rptrf_motif_length(
+                        ref_pos_tracker, contig_seq, length, indel_content
+                    )
+                    if filter_cfg.get("enabled", False) and not str_motif_match:
                         window_bp = int(filter_cfg.get("window_bp", 0))
                         if window_bp > 0 and str_classifier.is_within_str_window(
                             ref_pos_tracker, window_bp
@@ -208,9 +211,7 @@ class ContigScanner:
                         in_STR_region=self._span_has_str(
                             ref_pos_tracker, length, str_classifier
                         ),
-                        in_STR=str_classifier.matches_rptrf_motif_length(
-                            ref_pos_tracker, contig_seq, length, indel_content
-                        ),
+                        in_STR=str_motif_match,
                         motif_length=motif_length,
                         map_quality=read.mapping_quality,
                         indel_content=indel_content,
@@ -231,7 +232,10 @@ class ContigScanner:
                         ref_pos_tracker : ref_pos_tracker + length
                     ]
                     filter_cfg = getattr(self.config, "str_candidate_filter", {})
-                    if filter_cfg.get("enabled", False):
+                    str_motif_match = str_classifier.matches_rptrf_motif_length(
+                        ref_pos_tracker, contig_seq, length, indel_content
+                    )
+                    if filter_cfg.get("enabled", False) and not str_motif_match:
                         window_bp = int(filter_cfg.get("window_bp", 0))
                         if window_bp > 0 and str_classifier.is_within_str_window(
                             ref_pos_tracker, window_bp
@@ -299,9 +303,7 @@ class ContigScanner:
                         in_STR_region=self._span_has_str(
                             ref_pos_tracker, length, str_classifier
                         ),
-                        in_STR=str_classifier.matches_rptrf_motif_length(
-                            ref_pos_tracker, contig_seq, length, indel_content
-                        ),
+                        in_STR=str_motif_match,
                         motif_length=motif_length,
                         map_quality=read.mapping_quality,
                         prefix_quality=prefix_quality,
