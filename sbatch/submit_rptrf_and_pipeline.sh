@@ -37,7 +37,7 @@ for sample in "${SAMPLES[@]}"; do
   bam="$(bam_path "$sample")"
   strdir="${DATA_DIR}/${sample}/repeatregions"
 
-  rptrf_jobid="$(sbatch <<EOF | awk '{print \$4}'
+  rptrf_jobid="$(sbatch <<EOF | awk '{print $4}'
 #!/bin/bash
 #SBATCH --account pkadmaster
 #SBATCH -c 10
@@ -62,7 +62,7 @@ cd "${strdir}"
 EOF
 )"
 
-  pipeline_jobid="$(sbatch --dependency=afterok:${rptrf_jobid} <<EOF | awk '{print \$4}'
+  pipeline_jobid="$(sbatch --dependency=afterok:${rptrf_jobid} <<EOF | awk '{print $4}'
 #!/bin/bash
 #SBATCH --account pkadmaster
 #SBATCH -c 30
