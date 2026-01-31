@@ -91,7 +91,7 @@ DEFAULT_PIPELINE: Dict[str, Any] = {
         "imperfect_micro_repeat_enabled": False,
         "imperfect_micro_repeat_min_units": 2,
         "imperfect_micro_repeat_max_motif_len": 3,
-        "imperfect_micro_repeat_window_bp": 12,
+        "imperfect_micro_repeat_flank_bp": 1,
         "imperfect_micro_repeat_max_mismatches": 1,
     },
     "indel_bins": [

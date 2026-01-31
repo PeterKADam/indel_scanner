@@ -226,10 +226,8 @@ class ContigScanner:
                             ):
                                 continue
                         if filter_cfg.get("imperfect_micro_repeat_enabled", False):
-                            micro_window = int(
-                                filter_cfg.get(
-                                    "imperfect_micro_repeat_window_bp", local_window
-                                )
+                            micro_flank_bp = int(
+                                filter_cfg.get("imperfect_micro_repeat_flank_bp", 1)
                             )
                             micro_min_units = int(
                                 filter_cfg.get("imperfect_micro_repeat_min_units", 2)
@@ -242,8 +240,10 @@ class ContigScanner:
                             micro_max_mismatches = int(
                                 filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
                             )
-                            micro_start = max(0, ref_pos_tracker - micro_window)
-                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                            micro_start = max(0, ref_pos_tracker - micro_flank_bp)
+                            micro_end = min(
+                                len(contig_seq), ref_pos_tracker + micro_flank_bp
+                            )
                             micro_seq = contig_seq[micro_start:micro_end]
                             if self._has_imperfect_repeat_run(
                                 micro_seq,
@@ -369,10 +369,8 @@ class ContigScanner:
                             ):
                                 continue
                         if filter_cfg.get("imperfect_micro_repeat_enabled", False):
-                            micro_window = int(
-                                filter_cfg.get(
-                                    "imperfect_micro_repeat_window_bp", local_window
-                                )
+                            micro_flank_bp = int(
+                                filter_cfg.get("imperfect_micro_repeat_flank_bp", 1)
                             )
                             micro_min_units = int(
                                 filter_cfg.get("imperfect_micro_repeat_min_units", 2)
@@ -385,8 +383,11 @@ class ContigScanner:
                             micro_max_mismatches = int(
                                 filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
                             )
-                            micro_start = max(0, ref_pos_tracker - micro_window)
-                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                            micro_start = max(0, ref_pos_tracker - micro_flank_bp)
+                            micro_end = min(
+                                len(contig_seq),
+                                ref_pos_tracker + length + micro_flank_bp,
+                            )
                             micro_seq = contig_seq[micro_start:micro_end]
                             if self._has_imperfect_repeat_run(
                                 micro_seq,
