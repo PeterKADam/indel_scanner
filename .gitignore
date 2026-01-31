@@ -7,3 +7,5 @@ repeatregions/
 scripts/*
 *.prof
 logs/
+notebooks/figures/
+notebooks/tables/
