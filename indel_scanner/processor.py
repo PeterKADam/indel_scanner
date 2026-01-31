@@ -177,6 +177,14 @@ class Processor:
                     flank_len,
                     is_insertion=True,
                 )
+                if (
+                    len(insertion.prefix_quality) < flank_len
+                    or len(insertion.suffix_quality) < flank_len
+                    or any(q is None for q in insertion.prefix_quality)
+                    or any(q is None for q in insertion.suffix_quality)
+                ):
+                    insertion.prefix_quality = [None]
+                    insertion.suffix_quality = [None]
                 insertion.indel_quality = list(qualities[read_pos_tracker:insertion_end])
                 found = True
                 break
@@ -199,6 +207,14 @@ class Processor:
                     flank_len,
                     is_insertion=False,
                 )
+                if (
+                    len(deletion.prefix_quality) < flank_len
+                    or len(deletion.suffix_quality) < flank_len
+                    or any(q is None for q in deletion.prefix_quality)
+                    or any(q is None for q in deletion.suffix_quality)
+                ):
+                    deletion.prefix_quality = [None]
+                    deletion.suffix_quality = [None]
                 found = True
                 break
             if op in REF_CONSUMING_OPS: ref_pos_tracker += length
