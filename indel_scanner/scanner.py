@@ -86,6 +86,40 @@ class ContigScanner:
                         return True
                     idx += motif_len
         return False
+
+    @staticmethod
+    def _has_imperfect_repeat_run(
+        seq: str, min_units: int, max_motif_len: int, max_mismatches: int
+    ) -> bool:
+        seq = seq.upper()
+        if not seq or "N" in seq:
+            return False
+        seq_len = len(seq)
+        for motif_len in range(1, max_motif_len + 1):
+            min_run_len = motif_len * min_units
+            if seq_len < min_run_len:
+                continue
+            for start in range(0, seq_len - min_run_len + 1):
+                motif = seq[start : start + motif_len]
+                if "N" in motif:
+                    continue
+                mismatches = 0
+                run_len = 0
+                idx = start
+                while idx + motif_len <= seq_len:
+                    chunk = seq[idx : idx + motif_len]
+                    for i, base in enumerate(chunk):
+                        if base != motif[i]:
+                            mismatches += 1
+                            if mismatches > max_mismatches:
+                                break
+                    if mismatches > max_mismatches:
+                        break
+                    run_len += motif_len
+                    if run_len >= min_run_len:
+                        return True
+                    idx += motif_len
+        return False
     def __init__(self, config: PipelineConfig):
         self.config = config
 
@@ -189,6 +223,33 @@ class ContigScanner:
                             micro_seq = contig_seq[micro_start:micro_end]
                             if self._has_repeat_run(
                                 micro_seq, micro_min_units, micro_max_motif_len
+                            ):
+                                continue
+                        if filter_cfg.get("imperfect_micro_repeat_enabled", False):
+                            micro_window = int(
+                                filter_cfg.get(
+                                    "imperfect_micro_repeat_window_bp", local_window
+                                )
+                            )
+                            micro_min_units = int(
+                                filter_cfg.get("imperfect_micro_repeat_min_units", 2)
+                            )
+                            micro_max_motif_len = int(
+                                filter_cfg.get(
+                                    "imperfect_micro_repeat_max_motif_len", max_motif_len
+                                )
+                            )
+                            micro_max_mismatches = int(
+                                filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
+                            )
+                            micro_start = max(0, ref_pos_tracker - micro_window)
+                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                            micro_seq = contig_seq[micro_start:micro_end]
+                            if self._has_imperfect_repeat_run(
+                                micro_seq,
+                                micro_min_units,
+                                micro_max_motif_len,
+                                micro_max_mismatches,
                             ):
                                 continue
                         has_repeat_in_indel = self._has_repeat_run(
@@ -305,6 +366,33 @@ class ContigScanner:
                             micro_seq = contig_seq[micro_start:micro_end]
                             if self._has_repeat_run(
                                 micro_seq, micro_min_units, micro_max_motif_len
+                            ):
+                                continue
+                        if filter_cfg.get("imperfect_micro_repeat_enabled", False):
+                            micro_window = int(
+                                filter_cfg.get(
+                                    "imperfect_micro_repeat_window_bp", local_window
+                                )
+                            )
+                            micro_min_units = int(
+                                filter_cfg.get("imperfect_micro_repeat_min_units", 2)
+                            )
+                            micro_max_motif_len = int(
+                                filter_cfg.get(
+                                    "imperfect_micro_repeat_max_motif_len", max_motif_len
+                                )
+                            )
+                            micro_max_mismatches = int(
+                                filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
+                            )
+                            micro_start = max(0, ref_pos_tracker - micro_window)
+                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                            micro_seq = contig_seq[micro_start:micro_end]
+                            if self._has_imperfect_repeat_run(
+                                micro_seq,
+                                micro_min_units,
+                                micro_max_motif_len,
+                                micro_max_mismatches,
                             ):
                                 continue
                         has_repeat_in_indel = self._has_repeat_run(

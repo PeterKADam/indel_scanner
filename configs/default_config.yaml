@@ -67,6 +67,11 @@ pipeline:
     micro_repeat_min_units: 2       # Minimum repeat units for micro repeats
     micro_repeat_max_motif_len: 3   # Max motif length for micro repeats
     micro_repeat_window_bp: 20      # Window around indel for micro repeats
+    imperfect_micro_repeat_enabled: false  # Filter imperfect micro repeats
+    imperfect_micro_repeat_min_units: 2    # Minimum repeat units
+    imperfect_micro_repeat_max_motif_len: 3 # Max motif length
+    imperfect_micro_repeat_window_bp: 12    # Window around indel
+    imperfect_micro_repeat_max_mismatches: 1 # Allowed mismatches
   snp_label: snp            # Label used for SNP counts in reports
   indel_bins:
     - label: indel_1bp
