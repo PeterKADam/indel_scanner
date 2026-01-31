@@ -150,6 +150,7 @@ class PipelineConfig:
         self.min_map_quality: int = self.scanner["min_map_quality"]
         self.min_base_quality: int = self.scanner["min_base_quality"]
         self.min_flank_quality: int = self.scanner["min_flank_quality"]
+        self.processor_flank_quality: int = self.min_flank_quality
         self.min_homopolymer_len: int = self.scanner["min_homopolymer_len"]
 
         self.temp_dir = self.output_path / self.scanner["temp_dir_name"]
@@ -160,6 +161,10 @@ class PipelineConfig:
             self.processor_output_dir / self.processor["passed_indels_filename"]
         )
         self.processor_filters = self.processor["filters"]
+        for filter_cfg in self.processor_filters:
+            if filter_cfg.get("name") == "low_singlebase_flanking_quality":
+                filter_cfg.setdefault("params", {})
+                filter_cfg["params"]["min_flank_quality"] = self.min_flank_quality
 
         self.per_type_report_filename = self.reporting["per_type_frequency_filename"]
         self.callable_bases_filename = self.reporting["callable_bases_filename"]
