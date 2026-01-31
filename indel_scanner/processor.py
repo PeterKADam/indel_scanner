@@ -12,7 +12,7 @@ from .IO import write_records_with_polars, iter_tsv_rows_in_batches
 from .configurator import PipelineConfig
 from .filters import IndelFilters
 from .indel import INDEL_TYPE, Indel, Insertion, Deletion, TSV_HEADERS
-from .utils import Cigar
+from .utils import Cigar, flank_qualities_by_ref
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +169,15 @@ class Processor:
         found = False
         for op, length in target_read.cigartuples: # type: ignore
             if op == Cigar.OP_I and ref_pos_tracker == insertion.ref_position and length == insertion.length:
-                prefix_start = max(0, read_pos_tracker - flank_len)
                 insertion_end = read_pos_tracker + length
-                suffix_end = min(len(qualities), insertion_end + flank_len)
-                insertion.prefix_quality = list(qualities[prefix_start:read_pos_tracker])
+                insertion.prefix_quality, insertion.suffix_quality = flank_qualities_by_ref(
+                    target_read,
+                    insertion.ref_position,
+                    insertion.length,
+                    flank_len,
+                    is_insertion=True,
+                )
                 insertion.indel_quality = list(qualities[read_pos_tracker:insertion_end])
-                insertion.suffix_quality = list(qualities[insertion_end:suffix_end])
                 found = True
                 break
             if op in REF_CONSUMING_OPS: ref_pos_tracker += length
@@ -189,10 +192,13 @@ class Processor:
         found = False
         for op, length in target_read.cigartuples: # type: ignore
             if op == Cigar.OP_D and ref_pos_tracker == deletion.ref_position and length == deletion.length:
-                prefix_start = max(0, read_pos_tracker - flank_len)
-                suffix_end = min(len(qualities), read_pos_tracker + flank_len)
-                deletion.prefix_quality = list(qualities[prefix_start:read_pos_tracker])
-                deletion.suffix_quality = list(qualities[read_pos_tracker:suffix_end])
+                deletion.prefix_quality, deletion.suffix_quality = flank_qualities_by_ref(
+                    target_read,
+                    deletion.ref_position,
+                    deletion.length,
+                    flank_len,
+                    is_insertion=False,
+                )
                 found = True
                 break
             if op in REF_CONSUMING_OPS: ref_pos_tracker += length

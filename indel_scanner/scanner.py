@@ -14,7 +14,7 @@ from .STR_Classifier import STRClassifier
 from .filters import IndelFilters
 from .homopolymer_classifier import HomopolymerClassifier
 from .indel import INDEL_TYPE
-from .utils import Cigar, as_cigar
+from .utils import Cigar, as_cigar, flank_qualities_by_ref
 from .configurator import PipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -131,16 +131,17 @@ class ContigScanner:
 
             if op == Cigar.OP_I:
                 if length >= self.config.min_indel_size:
-                    prefix_quality = None
                     indel_quality = None
-                    suffix_quality = None
                     flank_len = 5
-                    prefix_start = max(0, read_pos_tracker - flank_len)
                     insertion_end = read_pos_tracker + length
-                    suffix_end = min(len(qualities), insertion_end + flank_len)
-                    prefix_quality = list(qualities[prefix_start:read_pos_tracker])
+                    prefix_quality, suffix_quality = flank_qualities_by_ref(
+                        read,
+                        ref_pos_tracker,
+                        length,
+                        flank_len,
+                        is_insertion=True,
+                    )
                     indel_quality = list(qualities[read_pos_tracker:insertion_end])
-                    suffix_quality = list(qualities[insertion_end:suffix_end])
                     indel_content = seq[read_pos_tracker : read_pos_tracker + length]
                     filter_cfg = getattr(self.config, "str_candidate_filter", {})
                     str_motif_match = str_classifier.matches_rptrf_motif_length(
@@ -241,13 +242,14 @@ class ContigScanner:
                     )
             elif op == Cigar.OP_D:
                 if length >= self.config.min_indel_size:
-                    prefix_quality = None
-                    suffix_quality = None
                     flank_len = 5
-                    prefix_start = max(0, read_pos_tracker - flank_len)
-                    suffix_end = min(len(qualities), read_pos_tracker + flank_len)
-                    prefix_quality = list(qualities[prefix_start:read_pos_tracker])
-                    suffix_quality = list(qualities[read_pos_tracker:suffix_end])
+                    prefix_quality, suffix_quality = flank_qualities_by_ref(
+                        read,
+                        ref_pos_tracker,
+                        length,
+                        flank_len,
+                        is_insertion=False,
+                    )
                     indel_content = contig_seq[
                         ref_pos_tracker : ref_pos_tracker + length
                     ]
