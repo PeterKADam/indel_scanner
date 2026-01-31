@@ -46,7 +46,14 @@ for sample in "${SAMPLES[@]}"; do
 #SBATCH --job-name=rptrf_${sample}
 
 set -euo pipefail
-source "${HOME}/.bashrc"
+if [[ -f "${HOME}/miniconda3/etc/profile.d/conda.sh" ]]; then
+  source "${HOME}/miniconda3/etc/profile.d/conda.sh"
+elif [[ -f "${HOME}/anaconda3/etc/profile.d/conda.sh" ]]; then
+  source "${HOME}/anaconda3/etc/profile.d/conda.sh"
+else
+  echo "ERROR: conda.sh not found under ${HOME}/miniconda3 or ${HOME}/anaconda3" >&2
+  exit 1
+fi
 conda activate indel_scanner
 cd "${REPO_DIR}"
 if [[ -d "${RPTRF_BIN}" ]]; then
@@ -71,7 +78,14 @@ EOF
 #SBATCH --job-name=pipe_${sample}
 
 set -euo pipefail
-source "${HOME}/.bashrc"
+if [[ -f "${HOME}/miniconda3/etc/profile.d/conda.sh" ]]; then
+  source "${HOME}/miniconda3/etc/profile.d/conda.sh"
+elif [[ -f "${HOME}/anaconda3/etc/profile.d/conda.sh" ]]; then
+  source "${HOME}/anaconda3/etc/profile.d/conda.sh"
+else
+  echo "ERROR: conda.sh not found under ${HOME}/miniconda3 or ${HOME}/anaconda3" >&2
+  exit 1
+fi
 conda activate indel_scanner
 cd "${REPO_DIR}"
 python -m indel_scanner.main \
