@@ -9,3 +9,4 @@ scripts/*
 logs/
 notebooks/figures/
 notebooks/tables/
+*.out
