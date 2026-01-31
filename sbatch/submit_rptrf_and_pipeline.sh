@@ -9,6 +9,9 @@ DATA_DIR="/home/peterkad/pkadmaster/data"
 BAM_ROOT="/home/peterkad/pkadmaster/data/mutationalscanning_bam"
 OUTPUT_DIR="/home/peterkad/pkadmaster/indel_scanner/results"
 CONFIG_FILE="config.yaml"
+RPTRF_BIN="/home/peterkad/RPTRF/RPTRF2"
+RPTRF_MAX_MOTIF=100
+RPTRF_MIN_LENGTH=10
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -43,7 +46,16 @@ for sample in "${SAMPLES[@]}"; do
 
 set -euo pipefail
 cd "${REPO_DIR}"
-./run_rptrf.sh --fasta "${fasta}" --sample "${sample}" --data-dir "${DATA_DIR}"
+if [[ -d "${RPTRF_BIN}" ]]; then
+  RPTRF_BIN="${RPTRF_BIN%/}/RPTRF"
+fi
+if [[ ! -x "${RPTRF_BIN}" ]]; then
+  echo "ERROR: RPTRF binary not executable at ${RPTRF_BIN}" >&2
+  exit 1
+fi
+mkdir -p "${strdir}"
+cd "${strdir}"
+"${RPTRF_BIN}" -s "${fasta}" -m "${RPTRF_MAX_MOTIF}" -t "${RPTRF_MIN_LENGTH}"
 EOF
 )"
 

@@ -151,7 +151,6 @@ def write_per_type_mutation_report(
                     "callable_bases",
                     "str_region_count",
                     "frequency",
-                    "unique_rate",
                 ]
             )
             if passed_df is None or passed_df.empty:
@@ -201,7 +200,6 @@ def write_per_type_mutation_report(
                 denominator = callable_bases
                 frequency = count / denominator if denominator > 0 else 0.0
                 unique_sites = int(unique_counts.get((mutation_type, str_class), 0))
-                unique_rate = unique_sites / denominator if denominator > 0 else 0.0
                 writer.writerow(
                     [
                         mutation_type,
@@ -211,7 +209,6 @@ def write_per_type_mutation_report(
                         f"{callable_bases:.0f}",
                         str_region_count,
                         f"{frequency:.10e}",
-                        f"{unique_rate:.10e}",
                     ]
                 )
         logger.info(f"Per-type mutation report written to {report_path}")
