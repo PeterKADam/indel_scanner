@@ -57,29 +57,29 @@ def flank_qualities_by_ref(
     length: int,
     flank_len: int,
     is_insertion: bool,
-) -> tuple[list[int], list[int]]:
+) -> tuple[list[int | None], list[int | None]]:
     qualities = read.query_qualities or []
-    if not qualities or flank_len <= 0:
+    if flank_len <= 0:
         return [], []
     mapping = build_refpos_to_read_index(read)
     left_positions = range(ref_pos - flank_len, ref_pos)
     right_start = ref_pos if is_insertion else ref_pos + length
     right_positions = range(right_start, right_start + flank_len)
 
-    prefix_quality: list[int] = []
+    prefix_quality: list[int | None] = []
     for pos in left_positions:
         read_idx = mapping.get(pos)
-        if read_idx is None:
+        if read_idx is None or not (0 <= read_idx < len(qualities)):
+            prefix_quality.append(None)
             continue
-        if 0 <= read_idx < len(qualities):
-            prefix_quality.append(int(qualities[read_idx]))
+        prefix_quality.append(int(qualities[read_idx]))
 
-    suffix_quality: list[int] = []
+    suffix_quality: list[int | None] = []
     for pos in right_positions:
         read_idx = mapping.get(pos)
-        if read_idx is None:
+        if read_idx is None or not (0 <= read_idx < len(qualities)):
+            suffix_quality.append(None)
             continue
-        if 0 <= read_idx < len(qualities):
-            suffix_quality.append(int(qualities[read_idx]))
+        suffix_quality.append(int(qualities[read_idx]))
 
     return prefix_quality, suffix_quality

@@ -109,10 +109,15 @@ class IndelFilters:
         indel: FilterableIndel, min_flank_quality: int = 93, **kwargs
     ) -> None:
         if not indel.prefix_quality or not indel.suffix_quality:
+            indel.filter_mask |= FilterFlag.LOW_SINGLEBASE_FLANKING_QUALITY
             return
+        prefix_q = indel.prefix_quality[-1]
+        suffix_q = indel.suffix_quality[0]
         if (
-            int(indel.prefix_quality[-1]) < min_flank_quality
-            or int(indel.suffix_quality[0]) < min_flank_quality
+            prefix_q is None
+            or suffix_q is None
+            or int(prefix_q) < min_flank_quality
+            or int(suffix_q) < min_flank_quality
         ):
             indel.filter_mask |= FilterFlag.LOW_SINGLEBASE_FLANKING_QUALITY
 

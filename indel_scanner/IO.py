@@ -125,8 +125,10 @@ def candidate_to_scanner_row(record: IndelRecord) -> List[str]:
 
 
 def passed_to_processor_row(record: IndelRecord) -> List[str]:
-    def format_list(scores: Optional[List[int]]) -> str:
-        return ",".join(map(str, scores)) if scores is not None else "NA"
+    def format_list(scores: Optional[List[int | None]]) -> str:
+        if scores is None:
+            return "NA"
+        return ",".join("NA" if s is None else str(s) for s in scores)
 
     return [
         record.contig,
