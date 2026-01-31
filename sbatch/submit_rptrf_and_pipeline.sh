@@ -42,9 +42,12 @@ for sample in "${SAMPLES[@]}"; do
 #SBATCH --account pkadmaster
 #SBATCH -c 10
 #SBATCH --mem 300g
+#SBATCH --time 10:00:00
 #SBATCH --job-name=rptrf_${sample}
 
 set -euo pipefail
+source "${HOME}/.bashrc"
+conda activate indel_scanner
 cd "${REPO_DIR}"
 if [[ -d "${RPTRF_BIN}" ]]; then
   RPTRF_BIN="${RPTRF_BIN%/}/RPTRF"
@@ -64,9 +67,12 @@ EOF
 #SBATCH --account pkadmaster
 #SBATCH -c 30
 #SBATCH --mem 100g
+#SBATCH --time 10:00:00
 #SBATCH --job-name=pipe_${sample}
 
 set -euo pipefail
+source "${HOME}/.bashrc"
+conda activate indel_scanner
 cd "${REPO_DIR}"
 python -m indel_scanner.main \
   --bam "${bam}" \
