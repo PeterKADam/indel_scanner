@@ -182,7 +182,11 @@ def run_callable_only(
         total_stats, config.snp_label
     )
 
-    output_root = output_dir or config.output_path
+    output_root = (
+        output_dir / config.sample_name / config.run_id
+        if output_dir is not None
+        else config.output_path
+    )
     output_root.mkdir(parents=True, exist_ok=True)
 
     stats_path = output_root / "callable_stats_1_10.json"
