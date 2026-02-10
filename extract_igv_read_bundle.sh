@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage:
-#   ./extract_igv_read_bundle.sh [OUTPUT_DIR]
+#   ./extract_igv_read_bundle.sh [OUTPUT_DIR] [--with-global-name-check]
 #
 # Optional environment overrides:
 #   BAM=/path/to/file.bam
@@ -10,13 +10,15 @@ set -euo pipefail
 #   READ="read_name"
 #   REGION="contig:start-end"
 #
-# Produces:
+# Produces (always):
 #   - read_of_interest.sam
-#   - read_by_name.sam
 #   - locus_ref.fa
 #   - read_summary.txt
+# Produces (optional, slower):
+#   - read_by_name.sam
 
 OUTPUT_DIR="${1:-./igv_read_bundle}"
+WITH_GLOBAL_NAME_CHECK="${2:-}"
 mkdir -p "$OUTPUT_DIR"
 
 BAM="${BAM:-/home/peterkad/pkadmaster/data/mutationalscanning_bam/ph/diploid_assembly/ph_plus_unmapped_diploid_v2.bam}"
@@ -29,6 +31,11 @@ echo "FASTA:  $FASTA"
 echo "READ:   $READ"
 echo "REGION: $REGION"
 echo "OUT:    $OUTPUT_DIR"
+if [[ "$WITH_GLOBAL_NAME_CHECK" == "--with-global-name-check" ]]; then
+  echo "GLOBAL NAME CHECK: enabled"
+else
+  echo "GLOBAL NAME CHECK: disabled"
+fi
 
 if [[ ! -f "$BAM" ]]; then
   echo "ERROR: BAM not found: $BAM" >&2
@@ -43,9 +50,11 @@ samtools view -h "$BAM" "$REGION" \
   | awk -v q="$READ" '(/^@/) || ($1==q)' \
   > "$OUTPUT_DIR/read_of_interest.sam"
 
-samtools view -h "$BAM" \
-  | awk -v q="$READ" '(/^@/) || ($1==q)' \
-  > "$OUTPUT_DIR/read_by_name.sam"
+if [[ "$WITH_GLOBAL_NAME_CHECK" == "--with-global-name-check" ]]; then
+  samtools view -h "$BAM" \
+    | awk -v q="$READ" '(/^@/) || ($1==q)' \
+    > "$OUTPUT_DIR/read_by_name.sam"
+fi
 
 samtools faidx "$FASTA" "$REGION" > "$OUTPUT_DIR/locus_ref.fa"
 
