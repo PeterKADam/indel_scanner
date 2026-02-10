@@ -12,3 +12,4 @@ notebooks/tables/
 *.out
 .tmp_smoke/
 igv_read_bundle/
+igv_read_bundle_*/
