@@ -1,5 +1,12 @@
 import pytest
-from indel_scanner.utils import (as_cigar, Cigar)
+from unittest.mock import Mock
+
+from indel_scanner.utils import (
+    as_cigar,
+    Cigar,
+    build_refpos_to_read_index,
+    flank_qualities_by_ref,
+)
 
 ### positive
 def test_as_cigar_with_valid_op():
@@ -56,4 +63,47 @@ def test_as_cigar_logs_error_on_invalid_op(caplog):
     # You can also be more specific about the log level
     assert len(caplog.records) == 1
     assert caplog.records[0].levelname == "ERROR"
+
+
+def test_build_refpos_to_read_index_uses_aligned_pairs_mapping():
+    read = Mock()
+    read.get_aligned_pairs.return_value = [
+        (0, 100),
+        (1, 101),
+        (2, 102),
+        (3, None),  # insertion base
+        (4, 103),
+        (5, 104),
+    ]
+
+    mapping = build_refpos_to_read_index(read)
+
+    assert mapping == {100: 0, 101: 1, 102: 2, 103: 4, 104: 5}
+    read.get_aligned_pairs.assert_called_once_with(matches_only=True)
+
+
+def test_flank_qualities_by_ref_handles_insertion_suffix_from_reference_anchor():
+    read = Mock()
+    read.query_qualities = [10, 11, 12, 13, 14, 15]
+    # Simulate 3M1I2M around ref 100..104.
+    read.get_aligned_pairs.return_value = [
+        (0, 100),
+        (1, 101),
+        (2, 102),
+        (3, None),
+        (4, 103),
+        (5, 104),
+    ]
+
+    prefix, suffix = flank_qualities_by_ref(
+        read=read,
+        ref_pos=103,
+        length=1,
+        flank_len=2,
+        is_insertion=True,
+    )
+
+    # Prefix looks at ref 101,102; suffix looks at 103,104.
+    assert prefix == [11, 12]
+    assert suffix == [14, 15]
 

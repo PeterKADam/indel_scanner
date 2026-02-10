@@ -41,9 +41,12 @@ class Timer:
 
 
 def build_refpos_to_read_index(read: pysam.AlignedSegment) -> dict[int, int]:
-    ref_positions = read.get_reference_positions(full_length=True)
     mapping: dict[int, int] = {}
-    for read_idx, ref_pos in enumerate(ref_positions):
+    # Use aligned pairs to avoid insertion-adjacent index drift from
+    # get_reference_positions(full_length=True) in some pysam versions.
+    for read_idx, ref_pos in read.get_aligned_pairs(matches_only=True):
+        if read_idx is None:
+            continue
         if ref_pos is None:
             continue
         if ref_pos not in mapping:

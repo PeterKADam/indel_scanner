@@ -143,6 +143,39 @@ class ContigScanner:
                 return False
         return True
 
+    @staticmethod
+    def _left_normalize_insertion(
+        contig_seq: str, ref_pos: int, inserted_seq: str
+    ) -> tuple[int, str]:
+        """Left-normalize insertion anchor and sequence in 0-based coordinates."""
+        if not inserted_seq or ref_pos <= 0 or not contig_seq:
+            return ref_pos, inserted_seq
+        normalized_pos = ref_pos
+        normalized_seq = inserted_seq
+        while (
+            normalized_pos > 0
+            and normalized_pos <= len(contig_seq)
+            and contig_seq[normalized_pos - 1] == normalized_seq[-1]
+        ):
+            normalized_pos -= 1
+            normalized_seq = normalized_seq[-1] + normalized_seq[:-1]
+        return normalized_pos, normalized_seq
+
+    @staticmethod
+    def _left_normalize_deletion(contig_seq: str, ref_pos: int, length: int) -> int:
+        """Left-normalize deletion start in 0-based coordinates."""
+        if length <= 0 or ref_pos <= 0 or not contig_seq:
+            return ref_pos
+        normalized_pos = ref_pos
+        while (
+            normalized_pos > 0
+            and (normalized_pos + length - 1) < len(contig_seq)
+            and contig_seq[normalized_pos - 1]
+            == contig_seq[normalized_pos + length - 1]
+        ):
+            normalized_pos -= 1
+        return normalized_pos
+
     def _parse_cigar_for_candidates(
         self,
         read: pysam.AlignedSegment,
@@ -168,9 +201,13 @@ class ContigScanner:
                     indel_quality = None
                     flank_len = 5
                     insertion_end = read_pos_tracker + length
+                    raw_indel_content = seq[read_pos_tracker : read_pos_tracker + length]
+                    norm_ref_pos, indel_content = self._left_normalize_insertion(
+                        contig_seq, ref_pos_tracker, raw_indel_content
+                    )
                     prefix_quality, suffix_quality = flank_qualities_by_ref(
                         read,
-                        ref_pos_tracker,
+                        norm_ref_pos,
                         length,
                         flank_len,
                         is_insertion=True,
@@ -183,18 +220,17 @@ class ContigScanner:
                     ):
                         continue
                     indel_quality = list(qualities[read_pos_tracker:insertion_end])
-                    indel_content = seq[read_pos_tracker : read_pos_tracker + length]
                     filter_cfg = getattr(self.config, "str_candidate_filter", {})
                     str_motif_match = str_classifier.matches_rptrf_motif_length(
-                        ref_pos_tracker, contig_seq, length, indel_content
+                        norm_ref_pos, contig_seq, length, indel_content
                     )
                     if filter_cfg.get("enabled", False) and not str_motif_match:
                         window_bp = int(filter_cfg.get("window_bp", 0))
                         if window_bp > 0 and str_classifier.is_within_str_window(
-                            ref_pos_tracker, window_bp
+                            norm_ref_pos, window_bp
                         ):
                             continue
-                        check_positions = {ref_pos_tracker, max(0, ref_pos_tracker - 1)}
+                        check_positions = {norm_ref_pos, max(0, norm_ref_pos - 1)}
                         if any(
                             str_classifier.is_str_like(pos, contig_seq)
                             for pos in check_positions
@@ -205,8 +241,8 @@ class ContigScanner:
                         )
                         local_window = int(filter_cfg.get("local_window_bp", 30))
                         max_motif_len = int(filter_cfg.get("max_motif_len", 6))
-                        win_start = max(0, ref_pos_tracker - local_window)
-                        win_end = min(len(contig_seq), ref_pos_tracker + local_window)
+                        win_start = max(0, norm_ref_pos - local_window)
+                        win_end = min(len(contig_seq), norm_ref_pos + local_window)
                         local_seq = contig_seq[win_start:win_end]
                         if filter_cfg.get("micro_repeat_enabled", False):
                             micro_window = int(
@@ -218,8 +254,8 @@ class ContigScanner:
                             micro_max_motif_len = int(
                                 filter_cfg.get("micro_repeat_max_motif_len", max_motif_len)
                             )
-                            micro_start = max(0, ref_pos_tracker - micro_window)
-                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                            micro_start = max(0, norm_ref_pos - micro_window)
+                            micro_end = min(len(contig_seq), norm_ref_pos + micro_window)
                             micro_seq = contig_seq[micro_start:micro_end]
                             if self._has_repeat_run(
                                 micro_seq, micro_min_units, micro_max_motif_len
@@ -240,9 +276,9 @@ class ContigScanner:
                             micro_max_mismatches = int(
                                 filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
                             )
-                            micro_start = max(0, ref_pos_tracker - micro_flank_bp)
+                            micro_start = max(0, norm_ref_pos - micro_flank_bp)
                             micro_end = min(
-                                len(contig_seq), ref_pos_tracker + micro_flank_bp
+                                len(contig_seq), norm_ref_pos + micro_flank_bp
                             )
                             micro_seq = contig_seq[micro_start:micro_end]
                             if self._has_imperfect_repeat_run(
@@ -282,23 +318,19 @@ class ContigScanner:
                             )
                         ):
                             continue
-                    motif_length = str_classifier.motif_length_at(ref_pos_tracker)
+                    motif_length = str_classifier.motif_length_at(norm_ref_pos)
                     if motif_length == 1:
                         str_motif_match = False
                     yield IndelRecord(
                         contig=ref_name,
-                        ref_position=ref_pos_tracker,
+                        ref_position=norm_ref_pos,
                         type=INDEL_TYPE.INSERTION,
                         length=length,
-                        prefix_context=seq[
-                            max(0, read_pos_tracker - 5) : read_pos_tracker
-                        ],
-                        suffix_context=seq[
-                            read_pos_tracker + length : read_pos_tracker + length + 5
-                        ],
+                        prefix_context=contig_seq[max(0, norm_ref_pos - 5) : norm_ref_pos],
+                        suffix_context=contig_seq[norm_ref_pos : norm_ref_pos + 5],
                         read_name=read_name,
                         in_STR_region=self._span_has_str(
-                            ref_pos_tracker, length, str_classifier
+                            norm_ref_pos, length, str_classifier
                         ),
                         in_STR=str_motif_match,
                         motif_length=motif_length,
@@ -311,9 +343,12 @@ class ContigScanner:
             elif op == Cigar.OP_D:
                 if length >= self.config.min_indel_size:
                     flank_len = 5
+                    norm_ref_pos = self._left_normalize_deletion(
+                        contig_seq, ref_pos_tracker, length
+                    )
                     prefix_quality, suffix_quality = flank_qualities_by_ref(
                         read,
-                        ref_pos_tracker,
+                        norm_ref_pos,
                         length,
                         flank_len,
                         is_insertion=False,
@@ -326,21 +361,21 @@ class ContigScanner:
                     ):
                         continue
                     indel_content = contig_seq[
-                        ref_pos_tracker : ref_pos_tracker + length
+                        norm_ref_pos : norm_ref_pos + length
                     ]
                     filter_cfg = getattr(self.config, "str_candidate_filter", {})
                     str_motif_match = str_classifier.matches_rptrf_motif_length(
-                        ref_pos_tracker, contig_seq, length, indel_content
+                        norm_ref_pos, contig_seq, length, indel_content
                     )
                     if filter_cfg.get("enabled", False) and not str_motif_match:
                         window_bp = int(filter_cfg.get("window_bp", 0))
                         if window_bp > 0 and str_classifier.is_within_str_window(
-                            ref_pos_tracker, window_bp
+                            norm_ref_pos, window_bp
                         ):
                             continue
-                        end_pos = ref_pos_tracker + max(0, length - 1)
+                        end_pos = norm_ref_pos + max(0, length - 1)
                         if str_classifier.is_str_like(
-                            ref_pos_tracker, contig_seq
+                            norm_ref_pos, contig_seq
                         ) or str_classifier.is_str_like(end_pos, contig_seq):
                             continue
                         motif_len = self._repeat_unit_length(
@@ -348,8 +383,8 @@ class ContigScanner:
                         )
                         local_window = int(filter_cfg.get("local_window_bp", 30))
                         max_motif_len = int(filter_cfg.get("max_motif_len", 6))
-                        win_start = max(0, ref_pos_tracker - local_window)
-                        win_end = min(len(contig_seq), ref_pos_tracker + local_window)
+                        win_start = max(0, norm_ref_pos - local_window)
+                        win_end = min(len(contig_seq), norm_ref_pos + local_window)
                         local_seq = contig_seq[win_start:win_end]
                         if filter_cfg.get("micro_repeat_enabled", False):
                             micro_window = int(
@@ -361,8 +396,8 @@ class ContigScanner:
                             micro_max_motif_len = int(
                                 filter_cfg.get("micro_repeat_max_motif_len", max_motif_len)
                             )
-                            micro_start = max(0, ref_pos_tracker - micro_window)
-                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                            micro_start = max(0, norm_ref_pos - micro_window)
+                            micro_end = min(len(contig_seq), norm_ref_pos + micro_window)
                             micro_seq = contig_seq[micro_start:micro_end]
                             if self._has_repeat_run(
                                 micro_seq, micro_min_units, micro_max_motif_len
@@ -383,10 +418,10 @@ class ContigScanner:
                             micro_max_mismatches = int(
                                 filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
                             )
-                            micro_start = max(0, ref_pos_tracker - micro_flank_bp)
+                            micro_start = max(0, norm_ref_pos - micro_flank_bp)
                             micro_end = min(
                                 len(contig_seq),
-                                ref_pos_tracker + length + micro_flank_bp,
+                                norm_ref_pos + length + micro_flank_bp,
                             )
                             micro_seq = contig_seq[micro_start:micro_end]
                             if self._has_imperfect_repeat_run(
@@ -426,26 +461,26 @@ class ContigScanner:
                             )
                         ):
                             continue
-                    motif_length = str_classifier.motif_length_at(ref_pos_tracker)
+                    motif_length = str_classifier.motif_length_at(norm_ref_pos)
                     if motif_length == 1:
                         str_motif_match = False
                     yield IndelRecord(
                         contig=ref_name,
-                        ref_position=ref_pos_tracker,
+                        ref_position=norm_ref_pos,
                         type=INDEL_TYPE.DELETION,
                         length=length,
                         prefix_context=contig_seq[
-                            max(0, ref_pos_tracker - 5) : ref_pos_tracker
+                            max(0, norm_ref_pos - 5) : norm_ref_pos
                         ],
                         indel_content=contig_seq[
-                            ref_pos_tracker : ref_pos_tracker + length
+                            norm_ref_pos : norm_ref_pos + length
                         ],
                         suffix_context=contig_seq[
-                            ref_pos_tracker + length : ref_pos_tracker + length + 5
+                            norm_ref_pos + length : norm_ref_pos + length + 5
                         ],
                         read_name=read_name,
                         in_STR_region=self._span_has_str(
-                            ref_pos_tracker, length, str_classifier
+                            norm_ref_pos, length, str_classifier
                         ),
                         in_STR=str_motif_match,
                         motif_length=motif_length,
@@ -549,8 +584,8 @@ class ContigScanner:
         window_start = max(0, ref_pos - min_len)
         window_end = min(len(contig_seq), ref_pos + length + min_len)
         context_slice = contig_seq[window_start:window_end]
-        interval_start = max(0, ref_pos - 1 - window_start)
-        interval_end = min(len(context_slice) - 1, ref_pos + length - window_start)
+        interval_start = max(0, ref_pos - window_start)
+        interval_end = min(len(context_slice) - 1, ref_pos + length - 1 - window_start)
         return HomopolymerClassifier.run_overlaps_interval(
             context_slice, (interval_start, interval_end), min_len=min_len
         )

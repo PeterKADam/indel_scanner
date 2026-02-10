@@ -2,9 +2,16 @@
 import pytest
 from unittest.mock import Mock, mock_open
 from pathlib import Path
+from types import SimpleNamespace
 
 import csv
-from indel_scanner.IO import write_records_to_tsv, cleanup_temp_dir, aggregate_tsv_parts
+from indel_scanner.IO import (
+    write_records_to_tsv,
+    cleanup_temp_dir,
+    aggregate_tsv_parts,
+    candidate_to_scanner_row,
+    passed_to_processor_row,
+)
 
 @pytest.fixture
 def mock_records():
@@ -220,3 +227,43 @@ def test_aggregate_tsv_parts_skips_headers(tmp_path):
         rows = list(csv.reader(f, delimiter="\t"))
 
     assert rows == [header, ["chr1", "100"], ["chr2", "200"]]
+
+
+def test_candidate_to_scanner_row_serializes_ref_position_as_1_based():
+    record = SimpleNamespace(
+        contig="chr7",
+        ref_position=99,
+        type=SimpleNamespace(value="ins"),
+        length=3,
+        prefix_context="AAA",
+        indel_content="CCC",
+        suffix_context="TTT",
+        read_name="read1",
+        in_STR_region=False,
+        in_STR=False,
+        motif_length=None,
+    )
+    row = candidate_to_scanner_row(record)
+    assert row[1] == "100"
+
+
+def test_passed_to_processor_row_serializes_ref_position_as_1_based():
+    record = SimpleNamespace(
+        contig="chr7",
+        ref_position=99,
+        type=SimpleNamespace(value="del"),
+        length=2,
+        prefix_context="AAA",
+        indel_content="CC",
+        suffix_context="TTT",
+        read_name="read2",
+        in_STR_region=True,
+        in_STR=True,
+        motif_length=2,
+        prefix_quality=[30, 31],
+        indel_quality=None,
+        suffix_quality=[32, 33],
+        map_quality=60,
+    )
+    row = passed_to_processor_row(record)
+    assert row[1] == "100"

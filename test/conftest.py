@@ -47,12 +47,46 @@ def read_factory():
         cigartuples=None,
         query_sequence=None,
     ):
+        def _aligned_pairs(
+            matches_only=False,
+        ):
+            pairs = []
+            read_pos = 0
+            ref_pos = reference_start
+            for op, length in (cigartuples or []):
+                # M, =, X
+                if op in (0, 7, 8):
+                    for i in range(length):
+                        pairs.append((read_pos + i, ref_pos + i))
+                    read_pos += length
+                    ref_pos += length
+                # I
+                elif op == 1:
+                    if not matches_only:
+                        for i in range(length):
+                            pairs.append((read_pos + i, None))
+                    read_pos += length
+                # D, N
+                elif op in (2, 3):
+                    if not matches_only:
+                        for i in range(length):
+                            pairs.append((None, ref_pos + i))
+                    ref_pos += length
+                # S
+                elif op == 4:
+                    read_pos += length
+            return pairs
+
         read = MagicMock()
         read.query_name = query_name
         read.reference_name = reference_name
         read.reference_start = reference_start
         read.cigartuples = cigartuples or []
         read.query_sequence = query_sequence
+        read.query_qualities = (
+            [93] * len(query_sequence) if query_sequence is not None else None
+        )
+        read.get_aligned_pairs.side_effect = _aligned_pairs
         # Ensure the mock doesn't complain about missing attributes
         read.is_unmapped = False
         read.is_secondary = False

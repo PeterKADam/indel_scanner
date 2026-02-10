@@ -1,0 +1,190 @@
+args:
+  bam: /home/peter/indel_scanner/.tmp_smoke/reads.bam
+  fasta: /home/peter/indel_scanner/.tmp_smoke/ref.fa
+  output: /home/peter/indel_scanner/.tmp_smoke/out
+  strdir: /home/peter/indel_scanner/.tmp_smoke/str
+  config: config.yaml
+  contigs: chr1
+  test_run: false
+  test_contigs_count: 10
+input:
+  bam: /home/peter/indel_scanner/.tmp_smoke/reads.bam
+  fasta: /home/peter/indel_scanner/.tmp_smoke/ref.fa
+  str_directory: /home/peter/indel_scanner/.tmp_smoke/str
+output:
+  base_output_path: /home/peter/indel_scanner/.tmp_smoke/out
+  sample_name: reads
+  run_id: 2026-02-10_074917
+  output_path: /home/peter/indel_scanner/.tmp_smoke/out/reads/2026-02-10_074917
+  log_dir: /home/peter/indel_scanner/.tmp_smoke/out/reads/2026-02-10_074917/logs
+config:
+  scanner:
+    num_processes: 30
+    min_indel_size: 1
+    preload_contigs: true
+    min_map_quality: 0
+    min_base_quality: 93
+    min_flank_quality: 93
+    min_homopolymer_len: 3
+    temp_dir_name: temp_indel_parts
+    output_filename: indel_scanner_results.tsv
+  processor:
+    output_subdir: processed
+    passed_indels_filename: final_passed_indels.tsv
+    filters:
+    - name: is_in_str
+    - name: is_homopolymer_context
+      params:
+        min_homopolymer_len: 3
+    - name: similar_indels_in_other_reads
+    - name: low_minimum_indel_quality
+      params:
+        min_quality: 93
+    - name: low_singlebase_flanking_quality
+      params:
+        min_flank_quality: 93
+  reporting:
+    per_type_frequency_filename: per_type_mutation_frequency.tsv
+  io:
+    write_buffer_size: 1000
+    read_batch_size: 10000
+  pipeline:
+    in_memory: false
+    max_in_memory_records: 500000
+    passed_parts_dir_name: temp_passed_indel_parts
+    sampling_bases: 1000000
+    sampling_strategy: top_contigs_random
+    sampling_top_n_contigs: 10
+    sampling_target_aligned_bases: 10000000
+    sampling_random_seed: 1
+    imperfect_str:
+      enabled: true
+      expand_bp: 0
+      window_bp: 20
+      motif_min: 2
+      motif_max: 6
+      max_mismatches: 2
+    low_complexity:
+      enabled: true
+      window_bp: 32
+      entropy_threshold: 1.2
+    repeat_run:
+      enabled: true
+      min_run_bp: 16
+      max_window_bp: 80
+      max_mismatches: 2
+    str_candidate_filter:
+      enabled: true
+      min_repeat_units: 3
+      window_bp: 100
+      local_window_bp: 30
+      max_motif_len: 6
+      aggressive: false
+      aggressive_min_repeat_units: 2
+      aggressive_max_motif_len: 12
+      micro_repeat_enabled: false
+      micro_repeat_min_units: 2
+      micro_repeat_max_motif_len: 3
+      micro_repeat_window_bp: 20
+      imperfect_micro_repeat_enabled: false
+      imperfect_micro_repeat_min_units: 2
+      imperfect_micro_repeat_max_motif_len: 3
+      imperfect_micro_repeat_flank_bp: 1
+      imperfect_micro_repeat_max_mismatches: 1
+    snp_label: snp
+    indel_bins:
+    - label: indel_1bp
+      min: 1
+      max: 1
+    - label: indel_2_3bp
+      min: 2
+      max: 3
+    - label: indel_4_10bp
+      min: 4
+      max: 10
+resolved:
+  scanner:
+    num_processes: 30
+    min_indel_size: 1
+    preload_contigs: true
+    min_map_quality: 0
+    min_base_quality: 93
+    min_flank_quality: 93
+    min_homopolymer_len: 3
+    temp_dir_name: temp_indel_parts
+    output_filename: indel_scanner_results.tsv
+  processor:
+    output_subdir: processed
+    passed_indels_filename: final_passed_indels.tsv
+    filters:
+    - name: is_in_str
+    - name: is_homopolymer_context
+      params:
+        min_homopolymer_len: 3
+    - name: similar_indels_in_other_reads
+    - name: low_minimum_indel_quality
+      params:
+        min_quality: 93
+    - name: low_singlebase_flanking_quality
+      params:
+        min_flank_quality: 93
+  reporting:
+    per_type_frequency_filename: per_type_mutation_frequency.tsv
+    callable_bases_filename: callable_bases.tsv
+  io:
+    write_buffer_size: 1000
+    read_batch_size: 10000
+  pipeline:
+    in_memory: false
+    max_in_memory_records: 500000
+    passed_parts_dir_name: temp_passed_indel_parts
+    sampling_bases: 1000000
+    sampling_strategy: top_contigs_random
+    sampling_top_n_contigs: 10
+    sampling_target_aligned_bases: 10000000
+    sampling_random_seed: 1
+    imperfect_str:
+      enabled: true
+      expand_bp: 0
+      window_bp: 20
+      motif_min: 2
+      motif_max: 6
+      max_mismatches: 2
+    low_complexity:
+      enabled: true
+      window_bp: 32
+      entropy_threshold: 1.2
+    repeat_run:
+      enabled: true
+      min_run_bp: 16
+      max_window_bp: 80
+      max_mismatches: 2
+    str_candidate_filter:
+      enabled: true
+      min_repeat_units: 3
+      window_bp: 100
+      local_window_bp: 30
+      max_motif_len: 6
+      aggressive: false
+      aggressive_min_repeat_units: 2
+      aggressive_max_motif_len: 12
+      micro_repeat_enabled: false
+      micro_repeat_min_units: 2
+      micro_repeat_max_motif_len: 3
+      micro_repeat_window_bp: 20
+      imperfect_micro_repeat_enabled: false
+      imperfect_micro_repeat_min_units: 2
+      imperfect_micro_repeat_max_motif_len: 3
+      imperfect_micro_repeat_flank_bp: 1
+      imperfect_micro_repeat_max_mismatches: 1
+    indel_bins:
+    - label: indel_1bp
+      min: 1
+      max: 1
+    - label: indel_2_3bp
+      min: 2
+      max: 3
+    - label: indel_4_10bp
+      min: 4
+      max: 10
+    snp_label: snp

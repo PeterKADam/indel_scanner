@@ -214,7 +214,7 @@ class IndelTsvFormatter:
         """Generates a TSV row for the 'scanner' output format."""
         return [
             indel.contig,
-            str(indel.ref_position),
+            str(indel.ref_position + 1),
             indel.type.value,
             str(indel.length),
             indel.sequencecontext_brackets(),
