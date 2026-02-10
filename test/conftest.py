@@ -31,6 +31,7 @@ def mock_scanner_config():
     }
     config.sampling_strategy = "largest_contig"
     config.sampling_bases = 1000000
+    config.breakpoint_coherence_window_bp = 60
     config.snp_label = "snp"
     return config
 

@@ -67,6 +67,7 @@ DEFAULT_PIPELINE: Dict[str, Any] = {
     "sampling_top_n_contigs": 10,
     "sampling_target_aligned_bases": 10000000,
     "sampling_random_seed": 1,
+    "breakpoint_coherence_window_bp": 60,
     "imperfect_str": {
         "enabled": False,
         "expand_bp": 0,
@@ -195,6 +196,9 @@ class PipelineConfig:
             "sampling_target_aligned_bases"
         ]
         self.sampling_random_seed: int = self.pipeline["sampling_random_seed"]
+        self.breakpoint_coherence_window_bp: int = self.pipeline[
+            "breakpoint_coherence_window_bp"
+        ]
         self.indel_bins = self.pipeline["indel_bins"]
         self.snp_label: str = self.pipeline["snp_label"]
         self.imperfect_str = self.pipeline["imperfect_str"]

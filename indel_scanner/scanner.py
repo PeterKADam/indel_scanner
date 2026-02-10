@@ -357,6 +357,9 @@ class ContigScanner:
                             ref_pos_tracker,
                             length,
                             is_insertion=True,
+                            window_bp=getattr(
+                                self.config, "breakpoint_coherence_window_bp", 60
+                            ),
                         )
                         yield IndelRecord(
                             contig=ref_name,
@@ -510,6 +513,9 @@ class ContigScanner:
                             ref_pos_tracker,
                             length,
                             is_insertion=False,
+                            window_bp=getattr(
+                                self.config, "breakpoint_coherence_window_bp", 60
+                            ),
                         )
                         yield IndelRecord(
                             contig=ref_name,

@@ -49,6 +49,7 @@ pipeline:
   sampling_top_n_contigs: 10            # Sample top N contigs by length
   sampling_target_aligned_bases: 10000000  # Target aligned bases for sampling
   sampling_random_seed: 1               # Seed for random sampling
+  breakpoint_coherence_window_bp: 60    # Same-read local edit-density window (bp) for breakpoint coherence metrics
   imperfect_str:
     enabled: true           # Enable imperfect repeat detection
     expand_bp: 0            # Expand STR intervals by this many bp
