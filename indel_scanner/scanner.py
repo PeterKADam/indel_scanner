@@ -162,302 +162,302 @@ class ContigScanner:
 
         for op_int, length in read.cigartuples:
             op = as_cigar(op_int)
-
-            if op == Cigar.OP_I:
-                if length >= self.config.min_indel_size:
-                    indel_quality = None
-                    flank_len = 5
-                    insertion_end = read_pos_tracker + length
-                    indel_content = seq[read_pos_tracker : read_pos_tracker + length]
-                    prefix_quality, suffix_quality = flank_qualities_by_ref(
-                        read,
-                        ref_pos_tracker,
-                        length,
-                        flank_len,
-                        is_insertion=True,
-                    )
-                    if (
-                        len(prefix_quality) < flank_len
-                        or len(suffix_quality) < flank_len
-                        or any(q is None for q in prefix_quality)
-                        or any(q is None for q in suffix_quality)
-                    ):
-                        continue
-                    indel_quality = list(qualities[read_pos_tracker:insertion_end])
-                    filter_cfg = getattr(self.config, "str_candidate_filter", {})
-                    str_motif_match = str_classifier.matches_rptrf_motif_length(
-                        ref_pos_tracker, contig_seq, length, indel_content
-                    )
-                    if filter_cfg.get("enabled", False) and not str_motif_match:
-                        window_bp = int(filter_cfg.get("window_bp", 0))
-                        if window_bp > 0 and str_classifier.is_within_str_window(
-                            ref_pos_tracker, window_bp
-                        ):
-                            continue
-                        check_positions = {ref_pos_tracker, max(0, ref_pos_tracker - 1)}
-                        if any(
-                            str_classifier.is_str_like(pos, contig_seq)
-                            for pos in check_positions
-                        ):
-                            continue
-                        motif_len = self._repeat_unit_length(
-                            indel_content, int(filter_cfg.get("min_repeat_units", 3))
+            try:
+                if op == Cigar.OP_I:
+                    if length >= self.config.min_indel_size:
+                        indel_quality = None
+                        flank_len = 5
+                        insertion_end = read_pos_tracker + length
+                        indel_content = seq[read_pos_tracker : read_pos_tracker + length]
+                        prefix_quality, suffix_quality = flank_qualities_by_ref(
+                            read,
+                            ref_pos_tracker,
+                            length,
+                            flank_len,
+                            is_insertion=True,
                         )
-                        local_window = int(filter_cfg.get("local_window_bp", 30))
-                        max_motif_len = int(filter_cfg.get("max_motif_len", 6))
-                        win_start = max(0, ref_pos_tracker - local_window)
-                        win_end = min(len(contig_seq), ref_pos_tracker + local_window)
-                        local_seq = contig_seq[win_start:win_end]
-                        if filter_cfg.get("micro_repeat_enabled", False):
-                            micro_window = int(
-                                filter_cfg.get("micro_repeat_window_bp", local_window)
-                            )
-                            micro_min_units = int(
-                                filter_cfg.get("micro_repeat_min_units", 2)
-                            )
-                            micro_max_motif_len = int(
-                                filter_cfg.get("micro_repeat_max_motif_len", max_motif_len)
-                            )
-                            micro_start = max(0, ref_pos_tracker - micro_window)
-                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
-                            micro_seq = contig_seq[micro_start:micro_end]
-                            if self._has_repeat_run(
-                                micro_seq, micro_min_units, micro_max_motif_len
-                            ):
-                                continue
-                        if filter_cfg.get("imperfect_micro_repeat_enabled", False):
-                            micro_flank_bp = int(
-                                filter_cfg.get("imperfect_micro_repeat_flank_bp", 1)
-                            )
-                            micro_min_units = int(
-                                filter_cfg.get("imperfect_micro_repeat_min_units", 2)
-                            )
-                            micro_max_motif_len = int(
-                                filter_cfg.get(
-                                    "imperfect_micro_repeat_max_motif_len", max_motif_len
-                                )
-                            )
-                            micro_max_mismatches = int(
-                                filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
-                            )
-                            micro_start = max(0, ref_pos_tracker - micro_flank_bp)
-                            micro_end = min(
-                                len(contig_seq), ref_pos_tracker + micro_flank_bp
-                            )
-                            micro_seq = contig_seq[micro_start:micro_end]
-                            if self._has_imperfect_repeat_run(
-                                micro_seq,
-                                micro_min_units,
-                                micro_max_motif_len,
-                                micro_max_mismatches,
-                            ):
-                                continue
-                        has_repeat_in_indel = self._has_repeat_run(
-                            indel_content,
-                            int(filter_cfg.get("min_repeat_units", 3)),
-                            max_motif_len,
-                        )
-                        if filter_cfg.get("aggressive", False):
-                            aggressive_min_units = int(
-                                filter_cfg.get("aggressive_min_repeat_units", 2)
-                            )
-                            aggressive_max_motif_len = int(
-                                filter_cfg.get("aggressive_max_motif_len", max_motif_len)
-                            )
-                            if self._has_repeat_run(
-                                local_seq, aggressive_min_units, aggressive_max_motif_len
-                            ) or self._has_repeat_run(
-                                indel_content,
-                                aggressive_min_units,
-                                aggressive_max_motif_len,
-                            ):
-                                continue
                         if (
-                            motif_len is not None
-                            or has_repeat_in_indel
-                            or self._has_repeat_run(
-                                local_seq,
+                            len(prefix_quality) < flank_len
+                            or len(suffix_quality) < flank_len
+                            or any(q is None for q in prefix_quality)
+                            or any(q is None for q in suffix_quality)
+                        ):
+                            continue
+                        indel_quality = list(qualities[read_pos_tracker:insertion_end])
+                        filter_cfg = getattr(self.config, "str_candidate_filter", {})
+                        str_motif_match = str_classifier.matches_rptrf_motif_length(
+                            ref_pos_tracker, contig_seq, length, indel_content
+                        )
+                        if filter_cfg.get("enabled", False) and not str_motif_match:
+                            window_bp = int(filter_cfg.get("window_bp", 0))
+                            if window_bp > 0 and str_classifier.is_within_str_window(
+                                ref_pos_tracker, window_bp
+                            ):
+                                continue
+                            check_positions = {ref_pos_tracker, max(0, ref_pos_tracker - 1)}
+                            if any(
+                                str_classifier.is_str_like(pos, contig_seq)
+                                for pos in check_positions
+                            ):
+                                continue
+                            motif_len = self._repeat_unit_length(
+                                indel_content, int(filter_cfg.get("min_repeat_units", 3))
+                            )
+                            local_window = int(filter_cfg.get("local_window_bp", 30))
+                            max_motif_len = int(filter_cfg.get("max_motif_len", 6))
+                            win_start = max(0, ref_pos_tracker - local_window)
+                            win_end = min(len(contig_seq), ref_pos_tracker + local_window)
+                            local_seq = contig_seq[win_start:win_end]
+                            if filter_cfg.get("micro_repeat_enabled", False):
+                                micro_window = int(
+                                    filter_cfg.get("micro_repeat_window_bp", local_window)
+                                )
+                                micro_min_units = int(
+                                    filter_cfg.get("micro_repeat_min_units", 2)
+                                )
+                                micro_max_motif_len = int(
+                                    filter_cfg.get("micro_repeat_max_motif_len", max_motif_len)
+                                )
+                                micro_start = max(0, ref_pos_tracker - micro_window)
+                                micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                                micro_seq = contig_seq[micro_start:micro_end]
+                                if self._has_repeat_run(
+                                    micro_seq, micro_min_units, micro_max_motif_len
+                                ):
+                                    continue
+                            if filter_cfg.get("imperfect_micro_repeat_enabled", False):
+                                micro_flank_bp = int(
+                                    filter_cfg.get("imperfect_micro_repeat_flank_bp", 1)
+                                )
+                                micro_min_units = int(
+                                    filter_cfg.get("imperfect_micro_repeat_min_units", 2)
+                                )
+                                micro_max_motif_len = int(
+                                    filter_cfg.get(
+                                        "imperfect_micro_repeat_max_motif_len", max_motif_len
+                                    )
+                                )
+                                micro_max_mismatches = int(
+                                    filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
+                                )
+                                micro_start = max(0, ref_pos_tracker - micro_flank_bp)
+                                micro_end = min(
+                                    len(contig_seq), ref_pos_tracker + micro_flank_bp
+                                )
+                                micro_seq = contig_seq[micro_start:micro_end]
+                                if self._has_imperfect_repeat_run(
+                                    micro_seq,
+                                    micro_min_units,
+                                    micro_max_motif_len,
+                                    micro_max_mismatches,
+                                ):
+                                    continue
+                            has_repeat_in_indel = self._has_repeat_run(
+                                indel_content,
                                 int(filter_cfg.get("min_repeat_units", 3)),
                                 max_motif_len,
                             )
-                        ):
-                            continue
-                    motif_length = str_classifier.motif_length_at(ref_pos_tracker)
-                    if motif_length == 1:
-                        str_motif_match = False
-                    yield IndelRecord(
-                        contig=ref_name,
-                        ref_position=ref_pos_tracker,
-                        type=INDEL_TYPE.INSERTION,
-                        length=length,
-                        prefix_context=contig_seq[
-                            max(0, ref_pos_tracker - 5) : ref_pos_tracker
-                        ],
-                        suffix_context=contig_seq[
-                            ref_pos_tracker : ref_pos_tracker + 5
-                        ],
-                        read_name=read_name,
-                        in_STR_region=self._span_has_str(
-                            ref_pos_tracker, length, str_classifier
-                        ),
-                        in_STR=str_motif_match,
-                        motif_length=motif_length,
-                        map_quality=read.mapping_quality,
-                        indel_content=indel_content,
-                        prefix_quality=prefix_quality,
-                        indel_quality=indel_quality,
-                        suffix_quality=suffix_quality,
-                    )
-            elif op == Cigar.OP_D:
-                if length >= self.config.min_indel_size:
-                    flank_len = 5
-                    prefix_quality, suffix_quality = flank_qualities_by_ref(
-                        read,
-                        ref_pos_tracker,
-                        length,
-                        flank_len,
-                        is_insertion=False,
-                    )
-                    if (
-                        len(prefix_quality) < flank_len
-                        or len(suffix_quality) < flank_len
-                        or any(q is None for q in prefix_quality)
-                        or any(q is None for q in suffix_quality)
-                    ):
-                        continue
-                    indel_content = contig_seq[
-                        ref_pos_tracker : ref_pos_tracker + length
-                    ]
-                    filter_cfg = getattr(self.config, "str_candidate_filter", {})
-                    str_motif_match = str_classifier.matches_rptrf_motif_length(
-                        ref_pos_tracker, contig_seq, length, indel_content
-                    )
-                    if filter_cfg.get("enabled", False) and not str_motif_match:
-                        window_bp = int(filter_cfg.get("window_bp", 0))
-                        if window_bp > 0 and str_classifier.is_within_str_window(
-                            ref_pos_tracker, window_bp
-                        ):
-                            continue
-                        end_pos = ref_pos_tracker + max(0, length - 1)
-                        if str_classifier.is_str_like(
-                            ref_pos_tracker, contig_seq
-                        ) or str_classifier.is_str_like(end_pos, contig_seq):
-                            continue
-                        motif_len = self._repeat_unit_length(
-                            indel_content, int(filter_cfg.get("min_repeat_units", 3))
-                        )
-                        local_window = int(filter_cfg.get("local_window_bp", 30))
-                        max_motif_len = int(filter_cfg.get("max_motif_len", 6))
-                        win_start = max(0, ref_pos_tracker - local_window)
-                        win_end = min(len(contig_seq), ref_pos_tracker + local_window)
-                        local_seq = contig_seq[win_start:win_end]
-                        if filter_cfg.get("micro_repeat_enabled", False):
-                            micro_window = int(
-                                filter_cfg.get("micro_repeat_window_bp", local_window)
-                            )
-                            micro_min_units = int(
-                                filter_cfg.get("micro_repeat_min_units", 2)
-                            )
-                            micro_max_motif_len = int(
-                                filter_cfg.get("micro_repeat_max_motif_len", max_motif_len)
-                            )
-                            micro_start = max(0, ref_pos_tracker - micro_window)
-                            micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
-                            micro_seq = contig_seq[micro_start:micro_end]
-                            if self._has_repeat_run(
-                                micro_seq, micro_min_units, micro_max_motif_len
-                            ):
-                                continue
-                        if filter_cfg.get("imperfect_micro_repeat_enabled", False):
-                            micro_flank_bp = int(
-                                filter_cfg.get("imperfect_micro_repeat_flank_bp", 1)
-                            )
-                            micro_min_units = int(
-                                filter_cfg.get("imperfect_micro_repeat_min_units", 2)
-                            )
-                            micro_max_motif_len = int(
-                                filter_cfg.get(
-                                    "imperfect_micro_repeat_max_motif_len", max_motif_len
+                            if filter_cfg.get("aggressive", False):
+                                aggressive_min_units = int(
+                                    filter_cfg.get("aggressive_min_repeat_units", 2)
                                 )
-                            )
-                            micro_max_mismatches = int(
-                                filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
-                            )
-                            micro_start = max(0, ref_pos_tracker - micro_flank_bp)
-                            micro_end = min(
-                                len(contig_seq),
-                                ref_pos_tracker + length + micro_flank_bp,
-                            )
-                            micro_seq = contig_seq[micro_start:micro_end]
-                            if self._has_imperfect_repeat_run(
-                                micro_seq,
-                                micro_min_units,
-                                micro_max_motif_len,
-                                micro_max_mismatches,
+                                aggressive_max_motif_len = int(
+                                    filter_cfg.get("aggressive_max_motif_len", max_motif_len)
+                                )
+                                if self._has_repeat_run(
+                                    local_seq, aggressive_min_units, aggressive_max_motif_len
+                                ) or self._has_repeat_run(
+                                    indel_content,
+                                    aggressive_min_units,
+                                    aggressive_max_motif_len,
+                                ):
+                                    continue
+                            if (
+                                motif_len is not None
+                                or has_repeat_in_indel
+                                or self._has_repeat_run(
+                                    local_seq,
+                                    int(filter_cfg.get("min_repeat_units", 3)),
+                                    max_motif_len,
+                                )
                             ):
                                 continue
-                        has_repeat_in_indel = self._has_repeat_run(
-                            indel_content,
-                            int(filter_cfg.get("min_repeat_units", 3)),
-                            max_motif_len,
+                        motif_length = str_classifier.motif_length_at(ref_pos_tracker)
+                        if motif_length == 1:
+                            str_motif_match = False
+                        yield IndelRecord(
+                            contig=ref_name,
+                            ref_position=ref_pos_tracker,
+                            type=INDEL_TYPE.INSERTION,
+                            length=length,
+                            prefix_context=contig_seq[
+                                max(0, ref_pos_tracker - 5) : ref_pos_tracker
+                            ],
+                            suffix_context=contig_seq[
+                                ref_pos_tracker : ref_pos_tracker + 5
+                            ],
+                            read_name=read_name,
+                            in_STR_region=self._span_has_str(
+                                ref_pos_tracker, length, str_classifier
+                            ),
+                            in_STR=str_motif_match,
+                            motif_length=motif_length,
+                            map_quality=read.mapping_quality,
+                            indel_content=indel_content,
+                            prefix_quality=prefix_quality,
+                            indel_quality=indel_quality,
+                            suffix_quality=suffix_quality,
                         )
-                        if filter_cfg.get("aggressive", False):
-                            aggressive_min_units = int(
-                                filter_cfg.get("aggressive_min_repeat_units", 2)
-                            )
-                            aggressive_max_motif_len = int(
-                                filter_cfg.get("aggressive_max_motif_len", max_motif_len)
-                            )
-                            if self._has_repeat_run(
-                                local_seq, aggressive_min_units, aggressive_max_motif_len
-                            ) or self._has_repeat_run(
-                                indel_content,
-                                aggressive_min_units,
-                                aggressive_max_motif_len,
-                            ):
-                                continue
+                elif op == Cigar.OP_D:
+                    if length >= self.config.min_indel_size:
+                        flank_len = 5
+                        prefix_quality, suffix_quality = flank_qualities_by_ref(
+                            read,
+                            ref_pos_tracker,
+                            length,
+                            flank_len,
+                            is_insertion=False,
+                        )
                         if (
-                            motif_len is not None
-                            or has_repeat_in_indel
-                            or self._has_repeat_run(
-                                local_seq,
-                                int(filter_cfg.get("min_repeat_units", 3)),
-                                max_motif_len,
-                            )
+                            len(prefix_quality) < flank_len
+                            or len(suffix_quality) < flank_len
+                            or any(q is None for q in prefix_quality)
+                            or any(q is None for q in suffix_quality)
                         ):
                             continue
-                    motif_length = str_classifier.motif_length_at(ref_pos_tracker)
-                    if motif_length == 1:
-                        str_motif_match = False
-                    yield IndelRecord(
-                        contig=ref_name,
-                        ref_position=ref_pos_tracker,
-                        type=INDEL_TYPE.DELETION,
-                        length=length,
-                        prefix_context=contig_seq[
-                            max(0, ref_pos_tracker - 5) : ref_pos_tracker
-                        ],
-                        indel_content=contig_seq[
+                        indel_content = contig_seq[
                             ref_pos_tracker : ref_pos_tracker + length
-                        ],
-                        suffix_context=contig_seq[
-                            ref_pos_tracker + length : ref_pos_tracker + length + 5
-                        ],
-                        read_name=read_name,
-                        in_STR_region=self._span_has_str(
-                            ref_pos_tracker, length, str_classifier
-                        ),
-                        in_STR=str_motif_match,
-                        motif_length=motif_length,
-                        map_quality=read.mapping_quality,
-                        prefix_quality=prefix_quality,
-                        suffix_quality=suffix_quality,
-                    )
-
-            if op in REF_CONSUMING_OPS:
-                ref_pos_tracker += length
-            if op in READ_CONSUMING_OPS:
-                read_pos_tracker += length
+                        ]
+                        filter_cfg = getattr(self.config, "str_candidate_filter", {})
+                        str_motif_match = str_classifier.matches_rptrf_motif_length(
+                            ref_pos_tracker, contig_seq, length, indel_content
+                        )
+                        if filter_cfg.get("enabled", False) and not str_motif_match:
+                            window_bp = int(filter_cfg.get("window_bp", 0))
+                            if window_bp > 0 and str_classifier.is_within_str_window(
+                                ref_pos_tracker, window_bp
+                            ):
+                                continue
+                            end_pos = ref_pos_tracker + max(0, length - 1)
+                            if str_classifier.is_str_like(
+                                ref_pos_tracker, contig_seq
+                            ) or str_classifier.is_str_like(end_pos, contig_seq):
+                                continue
+                            motif_len = self._repeat_unit_length(
+                                indel_content, int(filter_cfg.get("min_repeat_units", 3))
+                            )
+                            local_window = int(filter_cfg.get("local_window_bp", 30))
+                            max_motif_len = int(filter_cfg.get("max_motif_len", 6))
+                            win_start = max(0, ref_pos_tracker - local_window)
+                            win_end = min(len(contig_seq), ref_pos_tracker + local_window)
+                            local_seq = contig_seq[win_start:win_end]
+                            if filter_cfg.get("micro_repeat_enabled", False):
+                                micro_window = int(
+                                    filter_cfg.get("micro_repeat_window_bp", local_window)
+                                )
+                                micro_min_units = int(
+                                    filter_cfg.get("micro_repeat_min_units", 2)
+                                )
+                                micro_max_motif_len = int(
+                                    filter_cfg.get("micro_repeat_max_motif_len", max_motif_len)
+                                )
+                                micro_start = max(0, ref_pos_tracker - micro_window)
+                                micro_end = min(len(contig_seq), ref_pos_tracker + micro_window)
+                                micro_seq = contig_seq[micro_start:micro_end]
+                                if self._has_repeat_run(
+                                    micro_seq, micro_min_units, micro_max_motif_len
+                                ):
+                                    continue
+                            if filter_cfg.get("imperfect_micro_repeat_enabled", False):
+                                micro_flank_bp = int(
+                                    filter_cfg.get("imperfect_micro_repeat_flank_bp", 1)
+                                )
+                                micro_min_units = int(
+                                    filter_cfg.get("imperfect_micro_repeat_min_units", 2)
+                                )
+                                micro_max_motif_len = int(
+                                    filter_cfg.get(
+                                        "imperfect_micro_repeat_max_motif_len", max_motif_len
+                                    )
+                                )
+                                micro_max_mismatches = int(
+                                    filter_cfg.get("imperfect_micro_repeat_max_mismatches", 1)
+                                )
+                                micro_start = max(0, ref_pos_tracker - micro_flank_bp)
+                                micro_end = min(
+                                    len(contig_seq),
+                                    ref_pos_tracker + length + micro_flank_bp,
+                                )
+                                micro_seq = contig_seq[micro_start:micro_end]
+                                if self._has_imperfect_repeat_run(
+                                    micro_seq,
+                                    micro_min_units,
+                                    micro_max_motif_len,
+                                    micro_max_mismatches,
+                                ):
+                                    continue
+                            has_repeat_in_indel = self._has_repeat_run(
+                                indel_content,
+                                int(filter_cfg.get("min_repeat_units", 3)),
+                                max_motif_len,
+                            )
+                            if filter_cfg.get("aggressive", False):
+                                aggressive_min_units = int(
+                                    filter_cfg.get("aggressive_min_repeat_units", 2)
+                                )
+                                aggressive_max_motif_len = int(
+                                    filter_cfg.get("aggressive_max_motif_len", max_motif_len)
+                                )
+                                if self._has_repeat_run(
+                                    local_seq, aggressive_min_units, aggressive_max_motif_len
+                                ) or self._has_repeat_run(
+                                    indel_content,
+                                    aggressive_min_units,
+                                    aggressive_max_motif_len,
+                                ):
+                                    continue
+                            if (
+                                motif_len is not None
+                                or has_repeat_in_indel
+                                or self._has_repeat_run(
+                                    local_seq,
+                                    int(filter_cfg.get("min_repeat_units", 3)),
+                                    max_motif_len,
+                                )
+                            ):
+                                continue
+                        motif_length = str_classifier.motif_length_at(ref_pos_tracker)
+                        if motif_length == 1:
+                            str_motif_match = False
+                        yield IndelRecord(
+                            contig=ref_name,
+                            ref_position=ref_pos_tracker,
+                            type=INDEL_TYPE.DELETION,
+                            length=length,
+                            prefix_context=contig_seq[
+                                max(0, ref_pos_tracker - 5) : ref_pos_tracker
+                            ],
+                            indel_content=contig_seq[
+                                ref_pos_tracker : ref_pos_tracker + length
+                            ],
+                            suffix_context=contig_seq[
+                                ref_pos_tracker + length : ref_pos_tracker + length + 5
+                            ],
+                            read_name=read_name,
+                            in_STR_region=self._span_has_str(
+                                ref_pos_tracker, length, str_classifier
+                            ),
+                            in_STR=str_motif_match,
+                            motif_length=motif_length,
+                            map_quality=read.mapping_quality,
+                            prefix_quality=prefix_quality,
+                            suffix_quality=suffix_quality,
+                        )
+            finally:
+                if op in REF_CONSUMING_OPS:
+                    ref_pos_tracker += length
+                if op in READ_CONSUMING_OPS:
+                    read_pos_tracker += length
 
     def _is_callable_at_position(
         self,

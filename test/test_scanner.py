@@ -81,6 +81,35 @@ class TestParseCigar:
         )
         assert len(results) == 0
 
+    def test_tracker_advances_even_when_early_candidate_is_skipped(
+        self, mock_scanner_config, read_factory, mock_dependencies
+    ):
+        mock_scanner_config.min_indel_size = 1
+        scanner = ContigScanner(mock_scanner_config)
+        mock_str_classifier = mock_dependencies
+        mock_str_classifier.is_in_str.return_value = False
+        mock_str_classifier.matches_rptrf_motif_length.return_value = False
+        mock_str_classifier.motif_length_at.return_value = None
+
+        # First deletion near read start fails flank checks.
+        # Second deletion should still be reported at the correct downstream position.
+        read = read_factory(
+            reference_start=100,
+            cigartuples=[(2, 3), (0, 20), (2, 3), (0, 20)],  # 3D,20M,3D,20M
+            query_sequence="A" * 40,
+        )
+        read.query_qualities = [93] * len(read.query_sequence)
+        contig_seq = "A" * 500
+
+        results = list(
+            scanner._parse_cigar_for_candidates(read, mock_str_classifier, contig_seq)
+        )
+
+        assert len(results) == 1
+        assert results[0].type == INDEL_TYPE.DELETION
+        assert results[0].ref_position == 123
+        assert results[0].length == 3
+
 
 class TestIndelBinning:
     def test_classify_indel_bins(self, mock_scanner_config):
