@@ -15,7 +15,7 @@ import pyfastx
 
 from indel_scanner.configurator import PipelineConfig
 from indel_scanner.scanner import ContigScanner, REF_CONSUMING_OPS
-from indel_scanner.utils import as_cigar
+from indel_scanner.utils import as_cigar, build_refpos_to_read_index, flank_qualities_by_ref
 from indel_scanner.STR_Classifier import STRClassifier
 from indel_scanner.filters import IndelFilters
 from indel_scanner.indel import FilterFlag
@@ -31,6 +31,7 @@ def main() -> None:
     p.add_argument("--read", required=True)
     p.add_argument("--output", default="/tmp/indel_debug_out")
     p.add_argument("--target-del-len", type=int, default=3)
+    p.add_argument("--target-ref-pos", type=int, default=None, help="1-based reference position to inspect flank mapping around")
     p.add_argument("--window-start", type=int, default=None)
     p.add_argument("--window-end", type=int, default=None)
     args = p.parse_args()
@@ -79,6 +80,42 @@ def main() -> None:
         if cg in REF_CONSUMING_OPS:
             ref_enum += length
     print("as_cigar None ops:", none_ops)
+
+    if args.target_ref_pos is not None:
+        target_internal = args.target_ref_pos - 1
+        print("\nTARGET_FLANK_DEBUG")
+        print("target_ref_pos_1based:", args.target_ref_pos)
+        print("target_ref_pos_internal:", target_internal)
+        flank_len = 5
+        mapping = build_refpos_to_read_index(read)
+        left_positions = list(range(target_internal - flank_len, target_internal))
+        right_positions = list(
+            range(
+                target_internal + args.target_del_len,
+                target_internal + args.target_del_len + flank_len,
+            )
+        )
+        quals = read.query_qualities or []
+        print("LEFT(ref_pos_1based -> read_idx -> qual)")
+        for p0 in left_positions:
+            idx = mapping.get(p0)
+            q = None if idx is None or idx >= len(quals) else int(quals[idx])
+            print(f"{p0+1}\t{idx}\t{q}")
+        print("RIGHT(ref_pos_1based -> read_idx -> qual)")
+        for p0 in right_positions:
+            idx = mapping.get(p0)
+            q = None if idx is None or idx >= len(quals) else int(quals[idx])
+            print(f"{p0+1}\t{idx}\t{q}")
+
+        pfx, sfx = flank_qualities_by_ref(
+            read=read,
+            ref_pos=target_internal,
+            length=args.target_del_len,
+            flank_len=flank_len,
+            is_insertion=False,
+        )
+        print("flank_qualities_by_ref prefix:", pfx)
+        print("flank_qualities_by_ref suffix:", sfx)
 
     # C) Full scanner candidate output
     with open(args.config, "r", encoding="utf-8") as fh:
