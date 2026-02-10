@@ -143,6 +143,74 @@ class ContigScanner:
                 return False
         return True
 
+    @staticmethod
+    def _breakpoint_anchor_lengths(
+        cigartuples: list[tuple[int, int]], op_index: int
+    ) -> tuple[int, int]:
+        """Consecutive clean match bases directly flanking the candidate op."""
+        left_anchor = 0
+        i = op_index - 1
+        while i >= 0:
+            op_int, length = cigartuples[i]
+            if op_int in (pysam.CMATCH, pysam.CEQUAL):
+                left_anchor += length
+                i -= 1
+                continue
+            break
+
+        right_anchor = 0
+        i = op_index + 1
+        while i < len(cigartuples):
+            op_int, length = cigartuples[i]
+            if op_int in (pysam.CMATCH, pysam.CEQUAL):
+                right_anchor += length
+                i += 1
+                continue
+            break
+        return left_anchor, right_anchor
+
+    @staticmethod
+    def _local_edit_density(
+        read: pysam.AlignedSegment,
+        cigartuples: list[tuple[int, int]],
+        op_index: int,
+        ref_pos: int,
+        length: int,
+        is_insertion: bool,
+        window_bp: int = 30,
+    ) -> tuple[int, int]:
+        """Count nearby other indels and mismatch bases around candidate."""
+        center_start = ref_pos
+        center_end = ref_pos if is_insertion else ref_pos + max(0, length - 1)
+        win_start = center_start - window_bp
+        win_end = center_end + window_bp
+
+        nearby_indels = 0
+        nearby_mismatch_bases = 0
+
+        ref_tracker = read.reference_start
+        for idx, (op_int, op_len) in enumerate(cigartuples):
+            if idx != op_index:
+                if op_int == pysam.CINS:
+                    span_start = ref_tracker
+                    span_end = ref_tracker
+                    if not (span_end < win_start or span_start > win_end):
+                        nearby_indels += 1
+                elif op_int == pysam.CDEL:
+                    span_start = ref_tracker
+                    span_end = ref_tracker + op_len - 1
+                    if not (span_end < win_start or span_start > win_end):
+                        nearby_indels += 1
+                elif op_int == pysam.CDIFF:
+                    span_start = ref_tracker
+                    span_end = ref_tracker + op_len - 1
+                    if not (span_end < win_start or span_start > win_end):
+                        nearby_mismatch_bases += op_len
+
+            if op_int in (pysam.CMATCH, pysam.CDEL, pysam.CREF_SKIP, pysam.CEQUAL, pysam.CDIFF):
+                ref_tracker += op_len
+        return nearby_indels, nearby_mismatch_bases
+
     def _parse_cigar_for_candidates(
         self,
         read: pysam.AlignedSegment,
@@ -160,7 +228,7 @@ class ContigScanner:
         if read.cigartuples is None:
             return
 
-        for op_int, length in read.cigartuples:
+        for op_index, (op_int, length) in enumerate(read.cigartuples):
             op = as_cigar(op_int)
             try:
                 if op == Cigar.OP_I:
@@ -279,6 +347,17 @@ class ContigScanner:
                         motif_length = str_classifier.motif_length_at(ref_pos_tracker)
                         if motif_length == 1:
                             str_motif_match = False
+                        left_anchor, right_anchor = self._breakpoint_anchor_lengths(
+                            read.cigartuples, op_index
+                        )
+                        nearby_indels, nearby_mismatches = self._local_edit_density(
+                            read,
+                            read.cigartuples,
+                            op_index,
+                            ref_pos_tracker,
+                            length,
+                            is_insertion=True,
+                        )
                         yield IndelRecord(
                             contig=ref_name,
                             ref_position=ref_pos_tracker,
@@ -301,6 +380,10 @@ class ContigScanner:
                             prefix_quality=prefix_quality,
                             indel_quality=indel_quality,
                             suffix_quality=suffix_quality,
+                            left_anchor_bases=left_anchor,
+                            right_anchor_bases=right_anchor,
+                            nearby_indel_count=nearby_indels,
+                            nearby_mismatch_bases=nearby_mismatches,
                         )
                 elif op == Cigar.OP_D:
                     if length >= self.config.min_indel_size:
@@ -417,6 +500,17 @@ class ContigScanner:
                         motif_length = str_classifier.motif_length_at(ref_pos_tracker)
                         if motif_length == 1:
                             str_motif_match = False
+                        left_anchor, right_anchor = self._breakpoint_anchor_lengths(
+                            read.cigartuples, op_index
+                        )
+                        nearby_indels, nearby_mismatches = self._local_edit_density(
+                            read,
+                            read.cigartuples,
+                            op_index,
+                            ref_pos_tracker,
+                            length,
+                            is_insertion=False,
+                        )
                         yield IndelRecord(
                             contig=ref_name,
                             ref_position=ref_pos_tracker,
@@ -440,6 +534,10 @@ class ContigScanner:
                             map_quality=read.mapping_quality,
                             prefix_quality=prefix_quality,
                             suffix_quality=suffix_quality,
+                            left_anchor_bases=left_anchor,
+                            right_anchor_bases=right_anchor,
+                            nearby_indel_count=nearby_indels,
+                            nearby_mismatch_bases=nearby_mismatches,
                         )
             finally:
                 if op in REF_CONSUMING_OPS:

@@ -34,6 +34,17 @@ DEFAULT_PROCESSOR: Dict[str, Any] = {
             "name": "low_singlebase_flanking_quality",
             "params": {"min_flank_quality": 93},
         },
+        {
+            "name": "low_breakpoint_coherence",
+            "params": {
+                "min_left_anchor": 6,
+                "min_right_anchor": 6,
+                "min_anchor_sum": 16,
+                "max_nearby_indels": 1,
+                "max_nearby_mismatch_bases": 3,
+                "only_outside_str": True,
+            },
+        },
     ],
 }
 

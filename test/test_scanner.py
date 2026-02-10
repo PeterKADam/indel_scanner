@@ -5,6 +5,7 @@ from unittest.mock import Mock
 # --- IMPORTANT: Adjust these imports to match your project structure ---
 from indel_scanner.scanner import ContigScanner
 from indel_scanner.indel import INDEL_TYPE
+from indel_scanner.filters import IndelFilters
 
 
 # Fixtures from conftest.py are automatically available
@@ -464,4 +465,53 @@ class TestCallableIndelLogic:
         )
         assert len(results) == 1
         assert results[0].sequencecontext_brackets() == "ATATC[AT]ATATA"
+
+
+class TestBreakpointCoherenceFilter:
+    def test_breakpoint_metrics_populated_and_filterable(
+        self, mock_scanner_config, read_factory
+    ):
+        mock_scanner_config.min_indel_size = 1
+        mock_scanner_config.str_candidate_filter = {"enabled": False}
+        scanner = ContigScanner(mock_scanner_config)
+        mock_str_classifier = Mock()
+        mock_str_classifier.matches_rptrf_motif_length.return_value = False
+        mock_str_classifier.motif_length_at.return_value = None
+        mock_str_classifier.is_in_str.return_value = False
+
+        # 10M 1D 2X 1I 10M => low anchors around indel with nearby edits.
+        read = read_factory(
+            reference_start=100,
+            cigartuples=[(0, 10), (2, 1), (8, 2), (1, 1), (0, 10)],
+            query_sequence="A" * 23,
+        )
+        read.query_qualities = [93] * len(read.query_sequence)
+        contig_seq = "A" * 500
+
+        results = list(
+            scanner._parse_cigar_for_candidates(read, mock_str_classifier, contig_seq)
+        )
+        deletion = next(r for r in results if r.type == INDEL_TYPE.DELETION)
+        assert deletion.left_anchor_bases == 10
+        assert deletion.right_anchor_bases == 0
+        assert deletion.nearby_indel_count is not None
+        assert deletion.nearby_mismatch_bases is not None
+
+        IndelFilters.apply(
+            [
+                {
+                    "name": "low_breakpoint_coherence",
+                    "params": {
+                        "min_left_anchor": 6,
+                        "min_right_anchor": 1,
+                        "min_anchor_sum": 12,
+                        "max_nearby_indels": 0,
+                        "max_nearby_mismatch_bases": 1,
+                        "only_outside_str": True,
+                    },
+                }
+            ],
+            deletion,
+        )
+        assert deletion.is_filtered()
 

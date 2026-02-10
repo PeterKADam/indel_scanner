@@ -16,6 +16,10 @@ class FilterableIndel(Protocol):
     indel_quality: Optional[List[int]]
     prefix_quality: Optional[List[int]]
     suffix_quality: Optional[List[int]]
+    left_anchor_bases: Optional[int]
+    right_anchor_bases: Optional[int]
+    nearby_indel_count: Optional[int]
+    nearby_mismatch_bases: Optional[int]
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +125,39 @@ class IndelFilters:
         ):
             indel.filter_mask |= FilterFlag.LOW_SINGLEBASE_FLANKING_QUALITY
 
+    @staticmethod
+    def _low_breakpoint_coherence(
+        indel: FilterableIndel,
+        min_left_anchor: int = 6,
+        min_right_anchor: int = 6,
+        min_anchor_sum: int = 16,
+        max_nearby_indels: int = 1,
+        max_nearby_mismatch_bases: int = 3,
+        only_outside_str: bool = True,
+        **kwargs,
+    ) -> None:
+        if only_outside_str and indel.in_STR_region:
+            return
+        left_anchor = getattr(indel, "left_anchor_bases", None)
+        right_anchor = getattr(indel, "right_anchor_bases", None)
+        nearby_indels = getattr(indel, "nearby_indel_count", None)
+        nearby_mismatches = getattr(indel, "nearby_mismatch_bases", None)
+        if (
+            left_anchor is None
+            or right_anchor is None
+            or nearby_indels is None
+            or nearby_mismatches is None
+        ):
+            return
+        if (
+            left_anchor < min_left_anchor
+            or right_anchor < min_right_anchor
+            or (left_anchor + right_anchor) < min_anchor_sum
+            or nearby_indels > max_nearby_indels
+            or nearby_mismatches > max_nearby_mismatch_bases
+        ):
+            indel.filter_mask |= FilterFlag.LOW_BREAKPOINT_COHERENCE
+
     # ========================================================================
     # SECTION 3: APPLY FUNCTION (UNCHANGED)
     # ========================================================================
@@ -130,6 +167,7 @@ class IndelFilters:
         "similar_indels_in_other_reads": _similar_indels_in_other_reads,
         "low_minimum_indel_quality": _low_minimum_indel_quality,
         "low_singlebase_flanking_quality": _low_singlebase_flanking_quality,
+        "low_breakpoint_coherence": _low_breakpoint_coherence,
     }
 
     @staticmethod

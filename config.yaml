@@ -24,6 +24,14 @@ processor:
     - name: low_singlebase_flanking_quality
       params:
         min_flank_quality: 93  # Minimum base quality at immediate flanks
+    - name: low_breakpoint_coherence
+      params:
+        min_left_anchor: 6
+        min_right_anchor: 6
+        min_anchor_sum: 16
+        max_nearby_indels: 1
+        max_nearby_mismatch_bases: 3
+        only_outside_str: true
 
 reporting:
   per_type_frequency_filename: per_type_mutation_frequency.tsv  # Per-type report TSV

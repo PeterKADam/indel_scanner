@@ -40,6 +40,7 @@ class FilterFlag(IntFlag):
     SIMILAR_IN_OTHER_READS = 1 << 2
     LOW_MINIMUM_INDEL_QUALITY = 1 << 3
     LOW_SINGLEBASE_FLANKING_QUALITY = 1 << 4
+    LOW_BREAKPOINT_COHERENCE = 1 << 5
 
 
 @dataclass
@@ -63,6 +64,10 @@ class IndelRecord:
     indel_quality: Optional[List[int]] = None
     prefix_quality: Optional[List[int]] = None
     suffix_quality: Optional[List[int]] = None
+    left_anchor_bases: Optional[int] = None
+    right_anchor_bases: Optional[int] = None
+    nearby_indel_count: Optional[int] = None
+    nearby_mismatch_bases: Optional[int] = None
 
     def sequencecontext_brackets(self) -> str:
         """Returns the sequence context with brackets around the indel content."""
