@@ -34,6 +34,11 @@ def main() -> None:
     p.add_argument("--target-ref-pos", type=int, default=None, help="1-based reference position to inspect flank mapping around")
     p.add_argument("--window-start", type=int, default=None)
     p.add_argument("--window-end", type=int, default=None)
+    p.add_argument(
+        "--disable-str-candidate-filter",
+        action="store_true",
+        help="Temporarily disable scanner-level STR candidate prefilter for debugging.",
+    )
     args = p.parse_args()
 
     print(
@@ -131,6 +136,9 @@ def main() -> None:
         test_contigs_count=10,
     )
     cfg = PipelineConfig(cfg_args, cfg_data)
+    if args.disable_str_candidate_filter:
+        cfg.str_candidate_filter = {**cfg.str_candidate_filter, "enabled": False}
+        print("DEBUG: str_candidate_filter disabled")
     scanner = ContigScanner(cfg)
     strc = STRClassifier(cfg, args.contig)
     fasta = pyfastx.Fasta(args.fasta)
