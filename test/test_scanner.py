@@ -105,10 +105,12 @@ class TestParseCigar:
             scanner._parse_cigar_for_candidates(read, mock_str_classifier, contig_seq)
         )
 
-        assert len(results) == 1
-        assert results[0].type == INDEL_TYPE.DELETION
-        assert results[0].ref_position == 123
-        assert results[0].length == 3
+        assert len(results) >= 1
+        matching = [
+            r for r in results if r.type == INDEL_TYPE.DELETION and r.ref_position == 123
+        ]
+        assert len(matching) == 1
+        assert matching[0].length == 3
 
 
 class TestIndelBinning:

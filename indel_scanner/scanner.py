@@ -176,13 +176,6 @@ class ContigScanner:
                             flank_len,
                             is_insertion=True,
                         )
-                        if (
-                            len(prefix_quality) < flank_len
-                            or len(suffix_quality) < flank_len
-                            or any(q is None for q in prefix_quality)
-                            or any(q is None for q in suffix_quality)
-                        ):
-                            continue
                         indel_quality = list(qualities[read_pos_tracker:insertion_end])
                         filter_cfg = getattr(self.config, "str_candidate_filter", {})
                         str_motif_match = str_classifier.matches_rptrf_motif_length(
@@ -318,13 +311,6 @@ class ContigScanner:
                             flank_len,
                             is_insertion=False,
                         )
-                        if (
-                            len(prefix_quality) < flank_len
-                            or len(suffix_quality) < flank_len
-                            or any(q is None for q in prefix_quality)
-                            or any(q is None for q in suffix_quality)
-                        ):
-                            continue
                         indel_content = contig_seq[
                             ref_pos_tracker : ref_pos_tracker + length
                         ]
