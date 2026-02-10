@@ -9,8 +9,8 @@ from .indel import Insertion, Deletion, TSV_HEADERS, IndelRecord
 logger = logging.getLogger(__name__)
 
 # Coordinate contract:
-# - Internal `ref_position` is 0-based and left-normalized.
-# - TSV output `ref_position` is 1-based and left-normalized for IGV-friendly display.
+# - Internal `ref_position` is 0-based CIGAR-aligned (raw alignment anchor).
+# - TSV output `ref_position` is 1-based CIGAR-aligned for IGV-friendly display.
 
 def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: Path):
     """Converts records to a DataFrame and writes to a TSV file."""

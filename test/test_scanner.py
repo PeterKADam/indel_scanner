@@ -94,20 +94,6 @@ class TestIndelBinning:
 
 
 class TestRepeatUnitDetection:
-    def test_left_normalize_insertion_shifts_anchor_and_rotates_sequence(
-        self, mock_scanner_config
-    ):
-        scanner = ContigScanner(mock_scanner_config)
-        pos, seq = scanner._left_normalize_insertion("AAAAAAC", 5, "A")
-        assert pos == 0
-        assert seq == "A"
-
-    def test_left_normalize_deletion_shifts_start_in_repeat(self, mock_scanner_config):
-        scanner = ContigScanner(mock_scanner_config)
-        # Deleting "AA" from position 4 can be left-normalized to position 0.
-        pos = scanner._left_normalize_deletion("AAAAAAC", 4, 2)
-        assert pos == 0
-
     def test_valid_read_rejects_soft_clips(self, mock_scanner_config, read_factory):
         scanner = ContigScanner(mock_scanner_config)
         read = read_factory(

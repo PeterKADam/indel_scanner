@@ -11,3 +11,4 @@ notebooks/figures/
 notebooks/tables/
 *.out
 .tmp_smoke/
+igv_read_bundle/
