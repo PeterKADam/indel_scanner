@@ -79,6 +79,7 @@ DEFAULT_PIPELINE: Dict[str, Any] = {
         "enabled": True,
         "min_repeat_units": 3,
         "window_bp": 100,
+        "outside_window_heuristics_enabled": True,
         "local_window_bp": 30,
         "max_motif_len": 6,
         "aggressive": False,
