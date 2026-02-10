@@ -244,7 +244,7 @@ def test_candidate_to_scanner_row_serializes_ref_position_as_1_based():
         motif_length=None,
     )
     row = candidate_to_scanner_row(record)
-    assert row[1] == "100"
+    assert row[1] == "99"
 
 
 def test_passed_to_processor_row_serializes_ref_position_as_1_based():

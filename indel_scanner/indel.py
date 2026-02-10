@@ -212,9 +212,14 @@ class IndelTsvFormatter:
     @staticmethod
     def format_scanner_row(indel: Indel) -> List[str]:
         """Generates a TSV row for the 'scanner' output format."""
+        output_ref_pos = (
+            indel.ref_position
+            if indel.type == INDEL_TYPE.INSERTION
+            else indel.ref_position + 1
+        )
         return [
             indel.contig,
-            str(indel.ref_position + 1),
+            str(output_ref_pos),
             indel.type.value,
             str(indel.length),
             indel.sequencecontext_brackets(),

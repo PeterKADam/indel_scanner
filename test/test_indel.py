@@ -131,7 +131,7 @@ def test_to_scanner_tsv_row(insertion_instance, deletion_instance):
     ins_row = IndelTsvFormatter.format_scanner_row(insertion_instance)
     expected_ins = [
         "chr1",
-        "101",
+        "100",
         "ins",
         "3",
         "GATT[ACA]TACC",
@@ -165,7 +165,7 @@ def test_insertion_to_processor_tsv_row(insertion_instance):
     proc_row = IndelTsvFormatter.format_processor_row(insertion_instance)
     expected_proc = [
         "chr1",
-        "101",
+        "100",
         "ins",
         "3",
         "GATT[ACA]TACC",

@@ -9,8 +9,10 @@ from .indel import Insertion, Deletion, TSV_HEADERS, IndelRecord
 logger = logging.getLogger(__name__)
 
 # Coordinate contract:
-# - Internal `ref_position` is 0-based CIGAR-aligned (raw alignment anchor).
-# - TSV output `ref_position` is 1-based CIGAR-aligned for IGV-friendly display.
+# - Internal `ref_position` is 0-based CIGAR-aligned.
+# - TSV output follows IGV-style coordinates:
+#   - insertions: left-base 1-based coordinate (same numeric value as internal)
+#   - deletions: first-deleted-base 1-based coordinate (internal + 1)
 
 def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: Path):
     """Converts records to a DataFrame and writes to a TSV file."""
@@ -30,7 +32,10 @@ def write_records_with_polars(records: List[Union[Insertion, Deletion]], path: P
 
     final_df = df.select(
         pl.col("contig"),
-        (pl.col("ref_position") + 1).alias("ref_position"),
+        pl.when(pl.col("type") == "ins")
+        .then(pl.col("ref_position"))
+        .otherwise(pl.col("ref_position") + 1)
+        .alias("ref_position"),
         pl.col("type"),
         pl.col("length"),
         pl.col("sequence_context_brackets").alias("[sequence]_context"),
@@ -113,9 +118,14 @@ def write_records_to_tsv(
 
 
 def candidate_to_scanner_row(record: IndelRecord) -> List[str]:
+    output_ref_pos = (
+        record.ref_position
+        if record.type.value == "ins"
+        else record.ref_position + 1
+    )
     return [
         record.contig,
-        str(record.ref_position + 1),
+        str(output_ref_pos),
         record.type.value,
         str(record.length),
         f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
@@ -133,9 +143,14 @@ def passed_to_processor_row(record: IndelRecord) -> List[str]:
             return "NA"
         return ",".join("NA" if s is None else str(s) for s in scores)
 
+    output_ref_pos = (
+        record.ref_position
+        if record.type.value == "ins"
+        else record.ref_position + 1
+    )
     return [
         record.contig,
-        str(record.ref_position + 1),
+        str(output_ref_pos),
         record.type.value,
         str(record.length),
         f"{record.prefix_context}[{record.indel_content}]{record.suffix_context}",
